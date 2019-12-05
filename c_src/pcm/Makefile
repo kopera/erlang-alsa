@@ -1,10 +1,8 @@
 CURDIR := $(shell pwd)
-BASEDIR := $(abspath $(CURDIR)/..)
-PKG_CONFIG ?= pkg-config
+BASEDIR := $(abspath $(CURDIR)/../..)
 
-ifeq ($(ERTS_INCLUDE_DIR),)
-	ERTS_INCLUDE_DIR := $(shell erl -noshell -s init stop -eval "io:format(\"~ts/erts-~ts/include/\", [code:root_dir(), erlang:system_info(version)]).")
-endif
+ERL ?= erl
+PKG_CONFIG ?= pkg-config
 
 UNAME_SYS := $(shell uname -s)
 
@@ -24,12 +22,14 @@ endif
 LDFLAGS += -shared
 
 # Project specific C compiler/flags.
+ifeq ($(ERTS_INCLUDE_DIR),)
+	ERTS_INCLUDE_DIR := $(shell "$(ERL)" -noshell -s init stop -eval "io:format(\"~ts/erts-~ts/include/\", [code:root_dir(), erlang:system_info(version)]).")
+endif
+
 CFLAGS += -std=gnu11 -fPIC -I $(ERTS_INCLUDE_DIR)
 CFLAGS += $(shell $(PKG_CONFIG) --cflags alsa)
 
 LDFLAGS += $(shell $(PKG_CONFIG) --libs alsa)
-
-LDLIBS +=
 
 # Verbosity.
 V ?= 0
@@ -40,8 +40,7 @@ c_verbose = $(c_verbose_$(V))
 link_verbose_0 = @echo " LD    " $(@F);
 link_verbose = $(link_verbose_$(V))
 
-compile_c = $(c_verbose) $(CC) $(CFLAGS) $(CPPFLAGS) -c
-
+# Files
 SOURCES := \
 	alsa_pcm_nif.c
 
@@ -50,15 +49,14 @@ OBJECTS = $(addprefix _build/, $(addsuffix .o, $(basename $(SOURCES))))
 
 all: $(BASEDIR)/priv/alsa_pcm_nif.so
 
-$(BASEDIR)/priv/alsa_pcm_nif.so: $(OBJECTS) Makefile | $(BASEDIR)/priv/
-	$(link_verbose) $(CC) $(OBJECTS) $(LDFLAGS) $(LDLIBS) -o "$@"
+$(BASEDIR)/priv/alsa_pcm_nif.so: $(OBJECTS) | $(BASEDIR)/priv/
+	$(link_verbose) $(CC) $(OBJECTS) $(LDFLAGS) -o "$@"
 
 $(BASEDIR)/priv/:
 	@mkdir -p "$@"
 
-_build/%.o: %.c $(HEADERS) Makefile | _build/
-	echo ${CFLAGS}
-	$(compile_c) "$<" -o "$@"
+_build/%.o: %.c $(HEADERS) | _build/
+	$(c_verbose) $(CC) $(CFLAGS) $(CPPFLAGS) -c "$<" -o "$@"
 
 _build/:
 	@mkdir -p "$@"
