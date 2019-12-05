@@ -43,14 +43,14 @@ link_verbose = $(link_verbose_$(V))
 compile_c = $(c_verbose) $(CC) $(CFLAGS) $(CPPFLAGS) -c
 
 SOURCES := \
-	alsa_nif.c
+	alsa_pcm_nif.c
 
 HEADERS := $(wildcard *.h)
 OBJECTS = $(addprefix _build/, $(addsuffix .o, $(basename $(SOURCES))))
 
-all: $(BASEDIR)/priv/alsa_nif.so
+all: $(BASEDIR)/priv/alsa_pcm_nif.so
 
-$(BASEDIR)/priv/alsa_nif.so: $(OBJECTS) Makefile | $(BASEDIR)/priv/
+$(BASEDIR)/priv/alsa_pcm_nif.so: $(OBJECTS) Makefile | $(BASEDIR)/priv/
 	$(link_verbose) $(CC) $(OBJECTS) $(LDFLAGS) $(LDLIBS) -o "$@"
 
 $(BASEDIR)/priv/:
@@ -64,5 +64,5 @@ _build/:
 	@mkdir -p "$@"
 
 clean:
-	@rm -f "$(BASEDIR)/priv/alsa_nif.so"
+	@rm -f "$(BASEDIR)/priv/alsa_pcm_nif.so"
 	@rm -Rf "_build/"

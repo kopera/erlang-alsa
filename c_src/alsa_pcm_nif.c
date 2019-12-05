@@ -25,7 +25,7 @@ typedef struct {
     atomic_flag             handle_closed; // replace with locking
 
     khash_t(fd_set)        *select_fds;
-} alsa_nif_pcm_resource_t;
+} alsa_pcm_nif_resource_t;
 
 
 /* Atoms */
@@ -69,7 +69,7 @@ static ERL_NIF_TERM libasound_error_to_erl(ErlNifEnv *env, int error)
     }
 }
 
-static bool alsa_nif_get_error(ErlNifEnv *env, const ERL_NIF_TERM term, int *value)
+static bool alsa_pcm_nif_get_error(ErlNifEnv *env, const ERL_NIF_TERM term, int *value)
 {
     if (enif_get_int(env, term, value)) {
         *value = -(*value);
@@ -104,7 +104,7 @@ static bool alsa_nif_get_error(ErlNifEnv *env, const ERL_NIF_TERM term, int *val
     return false;
 }
 
-static bool alsa_nif_get_bool(ErlNifEnv *env, const ERL_NIF_TERM term, bool *value)
+static bool alsa_pcm_nif_get_bool(ErlNifEnv *env, const ERL_NIF_TERM term, bool *value)
 {
     if (enif_is_identical(term, am_true)) {
         *value = true;
@@ -117,7 +117,7 @@ static bool alsa_nif_get_bool(ErlNifEnv *env, const ERL_NIF_TERM term, bool *val
     return false;
 }
 
-static bool alsa_nif_get_pcm_access(ErlNifEnv *env, const ERL_NIF_TERM term, snd_pcm_access_t *value)
+static bool alsa_pcm_nif_get_pcm_access(ErlNifEnv *env, const ERL_NIF_TERM term, snd_pcm_access_t *value)
 {
     if (enif_is_identical(term, am_rw_interleaved)) {
         *value = SND_PCM_ACCESS_RW_INTERLEAVED;
@@ -130,7 +130,7 @@ static bool alsa_nif_get_pcm_access(ErlNifEnv *env, const ERL_NIF_TERM term, snd
     return false;
 }
 
-static bool alsa_nif_get_pcm_format(ErlNifEnv *env, const ERL_NIF_TERM term, snd_pcm_format_t *value)
+static bool alsa_pcm_nif_get_pcm_format(ErlNifEnv *env, const ERL_NIF_TERM term, snd_pcm_format_t *value)
 {
     char format_name[256];
     if (!enif_get_atom(env, term, format_name, ARRAY_LENGTH(format_name), ERL_NIF_LATIN1)) {
@@ -146,7 +146,7 @@ static bool alsa_nif_get_pcm_format(ErlNifEnv *env, const ERL_NIF_TERM term, snd
     return true;
 }
 
-static int alsa_nif_select(ErlNifEnv *env, alsa_nif_pcm_resource_t *resource, ERL_NIF_TERM ref)
+static int alsa_pcm_nif_select(ErlNifEnv *env, alsa_pcm_nif_resource_t *resource, ERL_NIF_TERM ref)
 {
     int poll_fds_count = snd_pcm_poll_descriptors_count(resource->handle);
     if (poll_fds_count <= 0) {
@@ -180,7 +180,7 @@ static int alsa_nif_select(ErlNifEnv *env, alsa_nif_pcm_resource_t *resource, ER
     return 0;
 }
 
-static bool alsa_nif_select_stop(ErlNifEnv *env, alsa_nif_pcm_resource_t *resource)
+static bool alsa_pcm_nif_select_stop(ErlNifEnv *env, alsa_pcm_nif_resource_t *resource)
 {
     khash_t(fd_set) *select_fds = resource->select_fds;
     khint_t select_fds_count = kh_size(select_fds);
@@ -208,13 +208,13 @@ static bool alsa_nif_select_stop(ErlNifEnv *env, alsa_nif_pcm_resource_t *resour
 /* Resources */
 
 /* Resource: pcm */
-static ErlNifResourceType* alsa_nif_pcm_resource_type;
+static ErlNifResourceType* alsa_pcm_nif_resource_type;
 
-static alsa_nif_pcm_resource_t* alsa_nif_pcm_resource_new(ErlNifPid owner, snd_pcm_t *handle)
+static alsa_pcm_nif_resource_t* alsa_pcm_nif_resource_new(ErlNifPid owner, snd_pcm_t *handle)
 {
-    alsa_nif_pcm_resource_t *resource = (alsa_nif_pcm_resource_t*) enif_alloc_resource(
-        alsa_nif_pcm_resource_type,
-        sizeof(alsa_nif_pcm_resource_t));
+    alsa_pcm_nif_resource_t *resource = (alsa_pcm_nif_resource_t*) enif_alloc_resource(
+        alsa_pcm_nif_resource_type,
+        sizeof(alsa_pcm_nif_resource_t));
     resource->owner = owner;
     resource->handle = handle;
     atomic_flag_clear(&(resource->handle_closed));
@@ -224,16 +224,16 @@ static alsa_nif_pcm_resource_t* alsa_nif_pcm_resource_new(ErlNifPid owner, snd_p
     return resource;
 }
 
-static void alsa_nif_pcm_resource_dtor(ErlNifEnv *env, void *obj)
+static void alsa_pcm_nif_resource_dtor(ErlNifEnv *env, void *obj)
 {
-    alsa_nif_pcm_resource_t *resource = (alsa_nif_pcm_resource_t *) obj;
+    alsa_pcm_nif_resource_t *resource = (alsa_pcm_nif_resource_t *) obj;
 
     kh_destroy(fd_set, resource->select_fds);
 }
 
-static void alsa_nif_pcm_resource_stop(ErlNifEnv *env, void *obj, int fd, int is_direct_call)
+static void alsa_pcm_nif_resource_stop(ErlNifEnv *env, void *obj, int fd, int is_direct_call)
 {
-    alsa_nif_pcm_resource_t *resource = (alsa_nif_pcm_resource_t *) obj;
+    alsa_pcm_nif_resource_t *resource = (alsa_pcm_nif_resource_t *) obj;
 
     khint_t iter = kh_get(fd_set, resource->select_fds, fd);
     kh_del(fd_set, resource->select_fds, iter);
@@ -244,28 +244,28 @@ static void alsa_nif_pcm_resource_stop(ErlNifEnv *env, void *obj, int fd, int is
     }
 }
 
-static void alsa_nif_pcm_resource_owner_down(ErlNifEnv *env, void *obj, ErlNifPid* pid, ErlNifMonitor* monitor)
+static void alsa_pcm_nif_resource_owner_down(ErlNifEnv *env, void *obj, ErlNifPid* pid, ErlNifMonitor* monitor)
 {
-    alsa_nif_pcm_resource_t *resource = (alsa_nif_pcm_resource_t *) obj;
+    alsa_pcm_nif_resource_t *resource = (alsa_pcm_nif_resource_t *) obj;
 
     if (!atomic_flag_test_and_set(&resource->handle_closed)) {
-        if (!alsa_nif_select_stop(env, resource)) {
+        if (!alsa_pcm_nif_select_stop(env, resource)) {
             snd_pcm_close(resource->handle);
             resource->handle = NULL;
         }
     }
 }
 
-static ErlNifResourceTypeInit alsa_nif_pcm_resource_callbacks = {
-    .dtor = alsa_nif_pcm_resource_dtor,
-    .stop = alsa_nif_pcm_resource_stop,
-    .down = alsa_nif_pcm_resource_owner_down,
+static ErlNifResourceTypeInit alsa_pcm_nif_resource_callbacks = {
+    .dtor = alsa_pcm_nif_resource_dtor,
+    .stop = alsa_pcm_nif_resource_stop,
+    .down = alsa_pcm_nif_resource_owner_down,
 };
 
 
 /* API */
 
-static ERL_NIF_TERM alsa_nif_pcm_open(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+static ERL_NIF_TERM alsa_pcm_nif_open(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
     int ret;
 
@@ -291,7 +291,7 @@ static ERL_NIF_TERM alsa_nif_pcm_open(ErlNifEnv *env, int argc, const ERL_NIF_TE
     ErlNifPid owner;
     enif_self(env, &owner);
 
-    alsa_nif_pcm_resource_t *resource = alsa_nif_pcm_resource_new(owner, handle);
+    alsa_pcm_nif_resource_t *resource = alsa_pcm_nif_resource_new(owner, handle);
     if (enif_monitor_process(env, resource, &owner, &resource->owner_monitor)) {
         enif_release_resource(resource);
         snd_pcm_close(handle);
@@ -304,15 +304,15 @@ static ERL_NIF_TERM alsa_nif_pcm_open(ErlNifEnv *env, int argc, const ERL_NIF_TE
     return enif_make_tuple2(env, am_ok, result);
 }
 
-static ERL_NIF_TERM alsa_nif_pcm_close(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+static ERL_NIF_TERM alsa_pcm_nif_close(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
-    alsa_nif_pcm_resource_t *resource;
-    if (!enif_get_resource(env, argv[0], alsa_nif_pcm_resource_type, (void**) &resource)) {
+    alsa_pcm_nif_resource_t *resource;
+    if (!enif_get_resource(env, argv[0], alsa_pcm_nif_resource_type, (void**) &resource)) {
         return enif_make_badarg(env);
     }
 
     if (!atomic_flag_test_and_set(&resource->handle_closed)) {
-        if (!alsa_nif_select_stop(env, resource)) {
+        if (!alsa_pcm_nif_select_stop(env, resource)) {
             snd_pcm_close(resource->handle);
             resource->handle = NULL;
         }
@@ -324,10 +324,10 @@ static ERL_NIF_TERM alsa_nif_pcm_close(ErlNifEnv* env, int argc, const ERL_NIF_T
     }
 }
 
-static ERL_NIF_TERM alsa_nif_pcm_set_hwparams(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+static ERL_NIF_TERM alsa_pcm_nif_set_hwparams(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
-    alsa_nif_pcm_resource_t *resource;
-    if (!enif_get_resource(env, argv[0], alsa_nif_pcm_resource_type, (void**) &resource)) {
+    alsa_pcm_nif_resource_t *resource;
+    if (!enif_get_resource(env, argv[0], alsa_pcm_nif_resource_type, (void**) &resource)) {
         return enif_make_badarg(env);
     }
 
@@ -358,7 +358,7 @@ static ERL_NIF_TERM alsa_nif_pcm_set_hwparams(ErlNifEnv* env, int argc, const ER
 
         if (strcmp("access", name) == 0) {
             snd_pcm_access_t access;
-            if (!alsa_nif_get_pcm_access(env, fields[1], &access)) {
+            if (!alsa_pcm_nif_get_pcm_access(env, fields[1], &access)) {
                 return enif_make_badarg(env);
             }
 
@@ -368,7 +368,7 @@ static ERL_NIF_TERM alsa_nif_pcm_set_hwparams(ErlNifEnv* env, int argc, const ER
             }
         } else if (strcmp("format", name) == 0) {
             snd_pcm_format_t format;
-            if (!alsa_nif_get_pcm_format(env, fields[1], &format)) {
+            if (!alsa_pcm_nif_get_pcm_format(env, fields[1], &format)) {
                 return enif_make_badarg(env);
             }
 
@@ -398,7 +398,7 @@ static ERL_NIF_TERM alsa_nif_pcm_set_hwparams(ErlNifEnv* env, int argc, const ER
             }
         } else if (strcmp("rate_resample", name) == 0) {
             bool resample;
-            if (!alsa_nif_get_bool(env, fields[1], &resample)) {
+            if (!alsa_pcm_nif_get_bool(env, fields[1], &resample)) {
                 return enif_make_badarg(env);
             }
             ret = snd_pcm_hw_params_set_rate_resample(resource->handle, hw_params, resample);
@@ -417,10 +417,10 @@ static ERL_NIF_TERM alsa_nif_pcm_set_hwparams(ErlNifEnv* env, int argc, const ER
     return am_ok;
 }
 
-static ERL_NIF_TERM alsa_nif_pcm_set_swparams(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+static ERL_NIF_TERM alsa_pcm_nif_set_swparams(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
-    alsa_nif_pcm_resource_t *resource;
-    if (!enif_get_resource(env, argv[0], alsa_nif_pcm_resource_type, (void**) &resource)) {
+    alsa_pcm_nif_resource_t *resource;
+    if (!enif_get_resource(env, argv[0], alsa_pcm_nif_resource_type, (void**) &resource)) {
         return enif_make_badarg(env);
     }
 
@@ -492,20 +492,20 @@ static ERL_NIF_TERM alsa_nif_pcm_set_swparams(ErlNifEnv* env, int argc, const ER
     return am_ok;
 }
 
-static ERL_NIF_TERM alsa_nif_pcm_set_params(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+static ERL_NIF_TERM alsa_pcm_nif_set_params(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
-    alsa_nif_pcm_resource_t *resource;
-    if (!enif_get_resource(env, argv[0], alsa_nif_pcm_resource_type, (void**) &resource)) {
+    alsa_pcm_nif_resource_t *resource;
+    if (!enif_get_resource(env, argv[0], alsa_pcm_nif_resource_type, (void**) &resource)) {
         return enif_make_badarg(env);
     }
 
     snd_pcm_format_t format;
-    if (!alsa_nif_get_pcm_format(env, argv[1], &format)) {
+    if (!alsa_pcm_nif_get_pcm_format(env, argv[1], &format)) {
         return enif_make_badarg(env);
     }
 
     snd_pcm_access_t access;
-    if (!alsa_nif_get_pcm_access(env, argv[2], &access)) {
+    if (!alsa_pcm_nif_get_pcm_access(env, argv[2], &access)) {
         return enif_make_badarg(env);
     }
 
@@ -520,7 +520,7 @@ static ERL_NIF_TERM alsa_nif_pcm_set_params(ErlNifEnv* env, int argc, const ERL_
     }
 
     bool resample;
-    if (!alsa_nif_get_bool(env, argv[5], &resample)) {
+    if (!alsa_pcm_nif_get_bool(env, argv[5], &resample)) {
         return enif_make_badarg(env);
     }
 
@@ -536,10 +536,10 @@ static ERL_NIF_TERM alsa_nif_pcm_set_params(ErlNifEnv* env, int argc, const ERL_
     return am_ok;
 }
 
-static ERL_NIF_TERM alsa_nif_pcm_prepare(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+static ERL_NIF_TERM alsa_pcm_nif_prepare(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
-    alsa_nif_pcm_resource_t *resource;
-    if (!enif_get_resource(env, argv[0], alsa_nif_pcm_resource_type, (void**) &resource)) {
+    alsa_pcm_nif_resource_t *resource;
+    if (!enif_get_resource(env, argv[0], alsa_pcm_nif_resource_type, (void**) &resource)) {
         return enif_make_badarg(env);
     }
 
@@ -550,15 +550,15 @@ static ERL_NIF_TERM alsa_nif_pcm_prepare(ErlNifEnv* env, int argc, const ERL_NIF
     return am_ok;
 }
 
-static ERL_NIF_TERM alsa_nif_pcm_pause(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+static ERL_NIF_TERM alsa_pcm_nif_pause(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
-    alsa_nif_pcm_resource_t *resource;
-    if (!enif_get_resource(env, argv[0], alsa_nif_pcm_resource_type, (void**) &resource)) {
+    alsa_pcm_nif_resource_t *resource;
+    if (!enif_get_resource(env, argv[0], alsa_pcm_nif_resource_type, (void**) &resource)) {
         return enif_make_badarg(env);
     }
 
     bool pause;
-    if (!alsa_nif_get_bool(env, argv[1], &pause)) {
+    if (!alsa_pcm_nif_get_bool(env, argv[1], &pause)) {
         return enif_make_badarg(env);
     }
 
@@ -569,20 +569,20 @@ static ERL_NIF_TERM alsa_nif_pcm_pause(ErlNifEnv* env, int argc, const ERL_NIF_T
     return am_ok;
 }
 
-static ERL_NIF_TERM alsa_nif_pcm_recover(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+static ERL_NIF_TERM alsa_pcm_nif_recover(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
-    alsa_nif_pcm_resource_t *resource;
-    if (!enif_get_resource(env, argv[0], alsa_nif_pcm_resource_type, (void**) &resource)) {
+    alsa_pcm_nif_resource_t *resource;
+    if (!enif_get_resource(env, argv[0], alsa_pcm_nif_resource_type, (void**) &resource)) {
         return enif_make_badarg(env);
     }
 
     int err;
-    if (!alsa_nif_get_error(env, argv[1], &err)) {
+    if (!alsa_pcm_nif_get_error(env, argv[1], &err)) {
         return enif_make_badarg(env);
     }
 
     bool silent;
-    if (!alsa_nif_get_bool(env, argv[2], &silent)) {
+    if (!alsa_pcm_nif_get_bool(env, argv[2], &silent)) {
         return enif_make_badarg(env);
     }
 
@@ -593,10 +593,10 @@ static ERL_NIF_TERM alsa_nif_pcm_recover(ErlNifEnv* env, int argc, const ERL_NIF
     return am_ok;
 }
 
-static ERL_NIF_TERM alsa_nif_pcm_reset(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+static ERL_NIF_TERM alsa_pcm_nif_reset(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
-    alsa_nif_pcm_resource_t *resource;
-    if (!enif_get_resource(env, argv[0], alsa_nif_pcm_resource_type, (void**) &resource)) {
+    alsa_pcm_nif_resource_t *resource;
+    if (!enif_get_resource(env, argv[0], alsa_pcm_nif_resource_type, (void**) &resource)) {
         return enif_make_badarg(env);
     }
 
@@ -607,10 +607,10 @@ static ERL_NIF_TERM alsa_nif_pcm_reset(ErlNifEnv* env, int argc, const ERL_NIF_T
     return am_ok;
 }
 
-static ERL_NIF_TERM alsa_nif_pcm_resume(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+static ERL_NIF_TERM alsa_pcm_nif_resume(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
-    alsa_nif_pcm_resource_t *resource;
-    if (!enif_get_resource(env, argv[0], alsa_nif_pcm_resource_type, (void**) &resource)) {
+    alsa_pcm_nif_resource_t *resource;
+    if (!enif_get_resource(env, argv[0], alsa_pcm_nif_resource_type, (void**) &resource)) {
         return enif_make_badarg(env);
     }
 
@@ -618,7 +618,7 @@ static ERL_NIF_TERM alsa_nif_pcm_resume(ErlNifEnv* env, int argc, const ERL_NIF_
 
     int ret = snd_pcm_resume(resource->handle);
     if (ret == -EAGAIN) {
-        int ret = alsa_nif_select(env, resource, ref);
+        int ret = alsa_pcm_nif_select(env, resource, ref);
         if (ret < 0) {
             return enif_make_tuple2(env, am_error, libasound_error_to_erl(env, ret));
         }
@@ -630,10 +630,10 @@ static ERL_NIF_TERM alsa_nif_pcm_resume(ErlNifEnv* env, int argc, const ERL_NIF_
     return am_ok;
 }
 
-static ERL_NIF_TERM alsa_nif_pcm_writei(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+static ERL_NIF_TERM alsa_pcm_nif_writei(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
-    alsa_nif_pcm_resource_t *resource;
-    if (!enif_get_resource(env, argv[0], alsa_nif_pcm_resource_type, (void**) &resource)) {
+    alsa_pcm_nif_resource_t *resource;
+    if (!enif_get_resource(env, argv[0], alsa_pcm_nif_resource_type, (void**) &resource)) {
         return enif_make_badarg(env);
     }
 
@@ -651,7 +651,7 @@ static ERL_NIF_TERM alsa_nif_pcm_writei(ErlNifEnv* env, int argc, const ERL_NIF_
 
     snd_pcm_sframes_t frames_written = snd_pcm_writei(resource->handle, buffer.data, frames);
     if (frames_written == -EAGAIN || (frames_written >= 0 && (size_t)frames_written < frames)) {
-        int ret = alsa_nif_select(env, resource, ref);
+        int ret = alsa_pcm_nif_select(env, resource, ref);
         if (ret < 0) {
             return enif_make_tuple2(env, am_error, libasound_error_to_erl(env, ret));
         }
@@ -675,7 +675,7 @@ static ERL_NIF_TERM alsa_nif_pcm_writei(ErlNifEnv* env, int argc, const ERL_NIF_
 
 /* Initialization */
 
-static int alsa_nif_on_load(ErlNifEnv *env, void** priv_data, ERL_NIF_TERM load_info)
+static int alsa_pcm_nif_on_load(ErlNifEnv *env, void** priv_data, ERL_NIF_TERM load_info)
 {
     // Atoms
     am_ok = enif_make_atom(env, "ok");
@@ -701,9 +701,9 @@ static int alsa_nif_on_load(ErlNifEnv *env, void** priv_data, ERL_NIF_TERM load_
     am_rw_noninterleaved = enif_make_atom(env, "rw_noninterleaved");
 
     // Resources
-    alsa_nif_pcm_resource_type = enif_open_resource_type_x(env,
+    alsa_pcm_nif_resource_type = enif_open_resource_type_x(env,
         "pcm",
-        &alsa_nif_pcm_resource_callbacks,
+        &alsa_pcm_nif_resource_callbacks,
         ERL_NIF_RT_CREATE,
         NULL);
 
@@ -712,12 +712,12 @@ static int alsa_nif_on_load(ErlNifEnv *env, void** priv_data, ERL_NIF_TERM load_
     return 0;
 }
 
-static void alsa_nif_on_unload(ErlNifEnv *env, void* priv_data)
+static void alsa_pcm_nif_on_unload(ErlNifEnv *env, void* priv_data)
 {
 }
 
 
-static int alsa_nif_on_upgrade(ErlNifEnv *env, void** priv_data, void** old_priv_data, ERL_NIF_TERM load_info)
+static int alsa_pcm_nif_on_upgrade(ErlNifEnv *env, void** priv_data, void** old_priv_data, ERL_NIF_TERM load_info)
 {
     if (*old_priv_data != NULL) {
         return -1; /* Don't know how to do that */
@@ -725,7 +725,7 @@ static int alsa_nif_on_upgrade(ErlNifEnv *env, void** priv_data, void** old_priv
     if (*priv_data != NULL) {
         return -1; /* Don't know how to do that */
     }
-    if (alsa_nif_on_load(env, priv_data, load_info)) {
+    if (alsa_pcm_nif_on_load(env, priv_data, load_info)) {
         return -1;
     }
     return 0;
@@ -733,18 +733,17 @@ static int alsa_nif_on_upgrade(ErlNifEnv *env, void** priv_data, void** old_priv
 
 
 static ErlNifFunc nif_funcs[] = {
-    {"pcm_open_nif", 2, alsa_nif_pcm_open, ERL_NIF_DIRTY_JOB_IO_BOUND},
-    {"pcm_close_nif", 1, alsa_nif_pcm_close},
-    {"pcm_set_hwparams_nif", 2, alsa_nif_pcm_set_hwparams},
-    {"pcm_set_swparams_nif", 2, alsa_nif_pcm_set_swparams},
-    {"pcm_set_params_nif", 7, alsa_nif_pcm_set_params},
-    {"pcm_prepare_nif", 1, alsa_nif_pcm_prepare},
-    {"pcm_pause_nif", 2, alsa_nif_pcm_pause},
-    {"pcm_recover_nif", 3, alsa_nif_pcm_recover},
-    {"pcm_reset_nif", 1, alsa_nif_pcm_reset},
-    {"pcm_resume_nif", 2, alsa_nif_pcm_resume},
-    {"pcm_writei_nif", 4, alsa_nif_pcm_writei},
+    {"open_nif", 2, alsa_pcm_nif_open, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"close_nif", 1, alsa_pcm_nif_close},
+    {"set_hwparams_nif", 2, alsa_pcm_nif_set_hwparams},
+    {"set_swparams_nif", 2, alsa_pcm_nif_set_swparams},
+    {"set_params_nif", 7, alsa_pcm_nif_set_params},
+    {"prepare_nif", 1, alsa_pcm_nif_prepare},
+    {"pause_nif", 2, alsa_pcm_nif_pause},
+    {"recover_nif", 3, alsa_pcm_nif_recover},
+    {"reset_nif", 1, alsa_pcm_nif_reset},
+    {"resume_nif", 2, alsa_pcm_nif_resume},
+    {"writei_nif", 4, alsa_pcm_nif_writei},
 };
 
-
-ERL_NIF_INIT(alsa, nif_funcs, alsa_nif_on_load, NULL, alsa_nif_on_upgrade, alsa_nif_on_unload);
+ERL_NIF_INIT(alsa_pcm, nif_funcs, alsa_pcm_nif_on_load, NULL, alsa_pcm_nif_on_upgrade, alsa_pcm_nif_on_unload);
