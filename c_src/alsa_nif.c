@@ -8,11 +8,24 @@
 #include <erl_nif.h>
 #include <alsa/asoundlib.h>
 
+#include "khash.h"
 
 #define ARRAY_LENGTH(x) \
     ((sizeof(x)/sizeof(0[x])) / ((size_t)(!(sizeof(x) % sizeof(0[x])))))
 
 /* Types */
+
+KHASH_SET_INIT_INT(fd_set);
+
+typedef struct {
+    ErlNifPid               owner;
+    ErlNifMonitor           owner_monitor;
+
+    snd_pcm_t              *handle;
+    atomic_flag             handle_closed; // replace with locking
+
+    khash_t(fd_set)        *select_fds;
+} alsa_nif_pcm_resource_t;
 
 
 /* Atoms */
@@ -20,6 +33,8 @@
 static ERL_NIF_TERM am_ok;
 static ERL_NIF_TERM am_error;
 static ERL_NIF_TERM am_wait;
+
+static ERL_NIF_TERM am_undefined;
 
 static ERL_NIF_TERM am_true;
 static ERL_NIF_TERM am_false;
@@ -36,51 +51,6 @@ static ERL_NIF_TERM am_estrpipe;
 static ERL_NIF_TERM am_rw_interleaved;
 static ERL_NIF_TERM am_rw_noninterleaved;
 
-/* Resources */
-
-/* Resource: pcm */
-typedef struct {
-    ErlNifPid               owner;
-    ErlNifMonitor           owner_monitor;
-
-    snd_pcm_t              *handle;
-    atomic_flag             handle_closed;
-} alsa_nif_pcm_resource_t;
-
-static ErlNifResourceType* alsa_nif_pcm_resource_type;
-
-static alsa_nif_pcm_resource_t* alsa_nif_pcm_resource_new(snd_pcm_t *handle, ErlNifPid owner)
-{
-    alsa_nif_pcm_resource_t *resource = (alsa_nif_pcm_resource_t*) enif_alloc_resource(
-        alsa_nif_pcm_resource_type,
-        sizeof(alsa_nif_pcm_resource_t));
-    resource->owner = owner;
-    resource->handle = handle;
-    atomic_flag_clear(&(resource->handle_closed));
-
-    return resource;
-}
-
-static void alsa_nif_pcm_resource_dtor(ErlNifEnv *env, void *obj)
-{
-    // nothing
-}
-
-static void alsa_nif_pcm_resource_owner_down(ErlNifEnv *env, void *obj, ErlNifPid* pid, ErlNifMonitor* monitor)
-{
-    alsa_nif_pcm_resource_t *alsa_nif_pcm_device_handle = (alsa_nif_pcm_resource_t *) obj;
-
-    if (!atomic_flag_test_and_set(&alsa_nif_pcm_device_handle->handle_closed)) {
-        snd_pcm_close(alsa_nif_pcm_device_handle->handle);
-        alsa_nif_pcm_device_handle->handle = NULL;
-    }
-}
-
-static ErlNifResourceTypeInit alsa_nif_pcm_resource_callbacks = {
-    .dtor = alsa_nif_pcm_resource_dtor,
-    .stop = NULL,
-    .down = alsa_nif_pcm_resource_owner_down,
-};
 
 /* Helpers */
 
@@ -195,11 +165,97 @@ static int alsa_nif_select(ErlNifEnv *env, alsa_nif_pcm_resource_t *resource, ER
             mode |= ERL_NIF_SELECT_WRITE;
         }
         assert (enif_select(env, poll_fd.fd, mode, resource, NULL, ref) >= 0);
+
+        int kh_put_ret;
+        kh_put(fd_set, resource->select_fds, poll_fd.fd, &kh_put_ret);
+        assert (kh_put_ret >= 0);
     }
     enif_free(poll_fds);
 
     return 0;
 }
+
+static bool alsa_nif_select_stop(ErlNifEnv *env, alsa_nif_pcm_resource_t *resource)
+{
+    khash_t(fd_set) *select_fds = resource->select_fds;
+    khint_t select_fds_count = kh_size(select_fds);
+
+    if (select_fds_count > 0) {
+        int fds[select_fds_count];
+        int fds_index = 0;
+
+        for (khint_t i = kh_begin(select_fds); i != kh_end(select_fds); ++i) {
+            if (!kh_exist(select_fds, i)) continue;
+
+            fds[fds_index++] = kh_key(select_fds, i);
+        }
+
+        for (size_t i = 0; i < select_fds_count; i++) {
+            assert (enif_select(env, fds[i], ERL_NIF_SELECT_STOP, resource, NULL, am_undefined) >= 0);
+        }
+
+        return true;
+    }
+    return false;
+}
+
+
+/* Resources */
+
+/* Resource: pcm */
+static ErlNifResourceType* alsa_nif_pcm_resource_type;
+
+static alsa_nif_pcm_resource_t* alsa_nif_pcm_resource_new(ErlNifPid owner, snd_pcm_t *handle)
+{
+    alsa_nif_pcm_resource_t *resource = (alsa_nif_pcm_resource_t*) enif_alloc_resource(
+        alsa_nif_pcm_resource_type,
+        sizeof(alsa_nif_pcm_resource_t));
+    resource->owner = owner;
+    resource->handle = handle;
+    atomic_flag_clear(&(resource->handle_closed));
+
+    resource->select_fds = kh_init(fd_set);
+
+    return resource;
+}
+
+static void alsa_nif_pcm_resource_dtor(ErlNifEnv *env, void *obj)
+{
+    alsa_nif_pcm_resource_t *resource = (alsa_nif_pcm_resource_t *) obj;
+
+    kh_destroy(fd_set, resource->select_fds);
+}
+
+static void alsa_nif_pcm_resource_stop(ErlNifEnv *env, void *obj, int fd, int is_direct_call)
+{
+    alsa_nif_pcm_resource_t *resource = (alsa_nif_pcm_resource_t *) obj;
+
+    khint_t iter = kh_get(fd_set, resource->select_fds, fd);
+    kh_del(fd_set, resource->select_fds, iter);
+
+    if (kh_size(resource->select_fds) == 0) {
+        snd_pcm_close(resource->handle);
+        resource->handle = NULL;
+    }
+}
+
+static void alsa_nif_pcm_resource_owner_down(ErlNifEnv *env, void *obj, ErlNifPid* pid, ErlNifMonitor* monitor)
+{
+    alsa_nif_pcm_resource_t *resource = (alsa_nif_pcm_resource_t *) obj;
+
+    if (!atomic_flag_test_and_set(&resource->handle_closed)) {
+        if (!alsa_nif_select_stop(env, resource)) {
+            snd_pcm_close(resource->handle);
+            resource->handle = NULL;
+        }
+    }
+}
+
+static ErlNifResourceTypeInit alsa_nif_pcm_resource_callbacks = {
+    .dtor = alsa_nif_pcm_resource_dtor,
+    .stop = alsa_nif_pcm_resource_stop,
+    .down = alsa_nif_pcm_resource_owner_down,
+};
 
 
 /* API */
@@ -230,7 +286,7 @@ static ERL_NIF_TERM alsa_nif_pcm_open(ErlNifEnv *env, int argc, const ERL_NIF_TE
     ErlNifPid owner;
     enif_self(env, &owner);
 
-    alsa_nif_pcm_resource_t *resource = alsa_nif_pcm_resource_new(handle, owner);
+    alsa_nif_pcm_resource_t *resource = alsa_nif_pcm_resource_new(owner, handle);
     if (enif_monitor_process(env, resource, &owner, &resource->owner_monitor)) {
         enif_release_resource(resource);
         snd_pcm_close(handle);
@@ -249,11 +305,12 @@ static ERL_NIF_TERM alsa_nif_pcm_close(ErlNifEnv* env, int argc, const ERL_NIF_T
     if (!enif_get_resource(env, argv[0], alsa_nif_pcm_resource_type, (void**) &resource)) {
         return enif_make_badarg(env);
     }
-// TODO select stop
-    if (!atomic_flag_test_and_set(&resource->handle_closed)) {
-        snd_pcm_close(resource->handle);
-        resource->handle = NULL;
 
+    if (!atomic_flag_test_and_set(&resource->handle_closed)) {
+        if (!alsa_nif_select_stop(env, resource)) {
+            snd_pcm_close(resource->handle);
+            resource->handle = NULL;
+        }
         enif_demonitor_process(env, resource, &resource->owner_monitor);
 
         return am_ok;
@@ -620,6 +677,8 @@ static int alsa_nif_on_load(ErlNifEnv *env, void** priv_data, ERL_NIF_TERM load_
     am_error = enif_make_atom(env, "error");
     am_wait = enif_make_atom(env, "wait");
 
+    am_undefined = enif_make_atom(env, "undefined");
+
     am_true = enif_make_atom(env, "true");
     am_false = enif_make_atom(env, "false");
 
@@ -668,7 +727,7 @@ static int alsa_nif_on_upgrade(ErlNifEnv *env, void** priv_data, void** old_priv
 
 
 static ErlNifFunc nif_funcs[] = {
-    {"pcm_open_nif", 2, alsa_nif_pcm_open},
+    {"pcm_open_nif", 2, alsa_nif_pcm_open, ERL_NIF_DIRTY_JOB_IO_BOUND},
     {"pcm_close_nif", 1, alsa_nif_pcm_close},
     {"pcm_set_hwparams_nif", 2, alsa_nif_pcm_set_hwparams},
     {"pcm_set_swparams_nif", 2, alsa_nif_pcm_set_swparams},
