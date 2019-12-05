@@ -219,6 +219,14 @@ writei(PCM, Buffer, Frames, WriteRef, Timeout) ->
     case writei_nif(PCM, Buffer, Frames, WriteRef) of
         ok ->
             ok;
+        {wait, undefined, FramesWritten, BytesWritten} ->
+            timer:sleep(1),
+            <<_:BytesWritten/binary, BufferRest/binary>> = Buffer,
+            writei(PCM,
+                BufferRest,
+                Frames - FramesWritten,
+                WriteRef,
+                next_timeout(StartTime, Timeout));
         {wait, WriteRef, FramesWritten, BytesWritten} ->
             NewTimeout = next_timeout(StartTime, Timeout),
             receive

@@ -146,18 +146,18 @@ static bool alsa_pcm_nif_get_pcm_format(ErlNifEnv *env, const ERL_NIF_TERM term,
     return true;
 }
 
-static int alsa_pcm_nif_select(ErlNifEnv *env, alsa_pcm_nif_resource_t *resource, ERL_NIF_TERM ref)
+static bool alsa_pcm_nif_select(ErlNifEnv *env, alsa_pcm_nif_resource_t *resource, ERL_NIF_TERM ref)
 {
     int poll_fds_count = snd_pcm_poll_descriptors_count(resource->handle);
     if (poll_fds_count <= 0) {
-        return -EAGAIN;
+        return false;
     }
 
     struct pollfd *poll_fds = enif_alloc(poll_fds_count * sizeof(struct pollfd));
     poll_fds_count = snd_pcm_poll_descriptors(resource->handle, poll_fds, poll_fds_count);
     if (poll_fds_count <= 0) {
         enif_free (poll_fds);
-        return -EAGAIN;
+        return false;
     }
 
     for (int i = 0; i < poll_fds_count; i++) {
@@ -177,7 +177,7 @@ static int alsa_pcm_nif_select(ErlNifEnv *env, alsa_pcm_nif_resource_t *resource
     }
     enif_free(poll_fds);
 
-    return 0;
+    return true;
 }
 
 static bool alsa_pcm_nif_select_stop(ErlNifEnv *env, alsa_pcm_nif_resource_t *resource)
@@ -618,9 +618,8 @@ static ERL_NIF_TERM alsa_pcm_nif_resume(ErlNifEnv* env, int argc, const ERL_NIF_
 
     int ret = snd_pcm_resume(resource->handle);
     if (ret == -EAGAIN) {
-        int ret = alsa_pcm_nif_select(env, resource, ref);
-        if (ret < 0) {
-            return enif_make_tuple2(env, am_error, libasound_error_to_erl(env, ret));
+        if (!alsa_pcm_nif_select(env, resource, ref)) {
+            return enif_make_tuple2(env, am_error, libasound_error_to_erl(env, -EAGAIN));
         }
         return enif_make_tuple2(env, am_wait, ref);
     }
@@ -650,25 +649,36 @@ static ERL_NIF_TERM alsa_pcm_nif_writei(ErlNifEnv* env, int argc, const ERL_NIF_
     ERL_NIF_TERM ref = argv[3];
 
     snd_pcm_sframes_t frames_written = snd_pcm_writei(resource->handle, buffer.data, frames);
-    if (frames_written == -EAGAIN || (frames_written >= 0 && (size_t)frames_written < frames)) {
-        int ret = alsa_pcm_nif_select(env, resource, ref);
-        if (ret < 0) {
-            return enif_make_tuple2(env, am_error, libasound_error_to_erl(env, ret));
-        }
-        if (frames_written >= 0) {
-            ssize_t bytes_written = snd_pcm_frames_to_bytes(resource->handle, frames_written);
-            return enif_make_tuple4(env, am_wait, ref,
+    if (frames_written == frames) {
+        return am_ok;
+    } else if (frames_written >= 0 && (size_t)frames_written < frames) {
+        ssize_t bytes_written = snd_pcm_frames_to_bytes(resource->handle, frames_written);
+        if (!alsa_pcm_nif_select(env, resource, ref)) {
+            return enif_make_tuple4(env, am_wait,
+                am_undefined,
                 enif_make_ulong(env, frames_written),
                 enif_make_ulong(env, bytes_written));
         } else {
-            return enif_make_tuple4(env, am_wait, ref,
+            return enif_make_tuple4(env, am_wait,
+                ref,
+                enif_make_ulong(env, frames_written),
+                enif_make_ulong(env, bytes_written));
+        }
+    } else if (frames_written == -EAGAIN) {
+        if (!alsa_pcm_nif_select(env, resource, ref)) {
+            return enif_make_tuple4(env, am_wait,
+                am_undefined,
+                enif_make_ulong(env, 0),
+                enif_make_ulong(env, 0));
+        } else {
+            return enif_make_tuple4(env, am_wait,
+                ref,
                 enif_make_ulong(env, 0),
                 enif_make_ulong(env, 0));
         }
-    } else if (frames_written < 0) {
-        return enif_make_tuple2(env, am_error, libasound_error_to_erl(env, frames_written));
     } else {
-        return am_ok;
+        return enif_make_tuple2(env, am_error,
+            libasound_error_to_erl(env, frames_written));
     }
 }
 
