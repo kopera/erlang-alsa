@@ -45,6 +45,7 @@ static ERL_NIF_TERM am_eagain;
 static ERL_NIF_TERM am_ebadfd;
 static ERL_NIF_TERM am_eintr;
 static ERL_NIF_TERM am_enoent;
+static ERL_NIF_TERM am_enomem;
 static ERL_NIF_TERM am_enosys;
 static ERL_NIF_TERM am_epipe;
 static ERL_NIF_TERM am_estrpipe;
@@ -62,6 +63,7 @@ static ERL_NIF_TERM libasound_error_to_erl(ErlNifEnv *env, int error)
         case EBADFD: return am_ebadfd;
         case EINTR: return am_eintr;
         case ENOENT: return am_enoent;
+        case ENOMEM: return am_enomem;
         case ENOSYS: return am_enosys;
         case EPIPE: return am_epipe;
         case ESTRPIPE: return am_estrpipe;
@@ -88,6 +90,9 @@ static bool alsa_pcm_nif_get_error(ErlNifEnv *env, const ERL_NIF_TERM term, int 
             return true;
         } else if (enif_is_identical(term, am_enoent)) {
             *value = -ENOENT;
+            return true;
+        } else if (enif_is_identical(term, am_enomem)) {
+            *value = -ENOMEM;
             return true;
         } else if (enif_is_identical(term, am_enosys)) {
             *value = -ENOSYS;
@@ -646,39 +651,71 @@ static ERL_NIF_TERM alsa_pcm_nif_writei(ErlNifEnv* env, int argc, const ERL_NIF_
         return enif_make_badarg(env);
     }
 
+    if (snd_pcm_frames_to_bytes(resource->handle, frames) != buffer.size) {
+        return enif_make_badarg(env);
+    }
+
     ERL_NIF_TERM ref = argv[3];
 
     snd_pcm_sframes_t frames_written = snd_pcm_writei(resource->handle, buffer.data, frames);
-    if (frames_written == frames) {
-        return am_ok;
-    } else if (frames_written >= 0 && (size_t)frames_written < frames) {
+    if (frames_written > 0) {
         ssize_t bytes_written = snd_pcm_frames_to_bytes(resource->handle, frames_written);
-        if (!alsa_pcm_nif_select(env, resource, ref)) {
-            return enif_make_tuple4(env, am_wait,
-                am_undefined,
-                enif_make_ulong(env, frames_written),
-                enif_make_ulong(env, bytes_written));
+        return enif_make_tuple3(env, am_ok,
+            enif_make_ulong(env, frames_written),
+            enif_make_ulong(env, bytes_written));
+    } else if (frames_written == -EAGAIN || frames_written == 0) {
+        if (alsa_pcm_nif_select(env, resource, ref)) {
+            return enif_make_tuple2(env, am_wait, ref);
         } else {
-            return enif_make_tuple4(env, am_wait,
-                ref,
-                enif_make_ulong(env, frames_written),
-                enif_make_ulong(env, bytes_written));
-        }
-    } else if (frames_written == -EAGAIN) {
-        if (!alsa_pcm_nif_select(env, resource, ref)) {
-            return enif_make_tuple4(env, am_wait,
-                am_undefined,
-                enif_make_ulong(env, 0),
-                enif_make_ulong(env, 0));
-        } else {
-            return enif_make_tuple4(env, am_wait,
-                ref,
-                enif_make_ulong(env, 0),
-                enif_make_ulong(env, 0));
+            return am_wait;
         }
     } else {
         return enif_make_tuple2(env, am_error,
             libasound_error_to_erl(env, frames_written));
+    }
+}
+
+static ERL_NIF_TERM alsa_pcm_nif_readi(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    alsa_pcm_nif_resource_t *resource;
+    if (!enif_get_resource(env, argv[0], alsa_pcm_nif_resource_type, (void**) &resource)) {
+        return enif_make_badarg(env);
+    }
+
+    snd_pcm_uframes_t frames;
+    if (!enif_get_ulong(env, argv[1], &frames)) {
+        return enif_make_badarg(env);
+    }
+
+    ERL_NIF_TERM ref = argv[2];
+
+    ErlNifBinary buffer;
+    if (!enif_alloc_binary((size_t) snd_pcm_frames_to_bytes(resource->handle, frames), &buffer)) {
+        return enif_make_tuple2(env, am_error, am_enomem);
+    }
+
+    snd_pcm_sframes_t frames_read = snd_pcm_readi(resource->handle, buffer.data, frames);
+    if (frames_read > 0) {
+        if ((size_t)frames_read < frames) {
+            ssize_t bytes_read = snd_pcm_frames_to_bytes(resource->handle, frames_read);
+            if (!enif_realloc_binary(&buffer, bytes_read)) {
+                enif_release_binary(&buffer);
+                return enif_make_tuple2(env, am_error, am_enomem);
+            }
+        }
+        return enif_make_tuple3(env, am_ok,
+            enif_make_ulong(env, frames_read),
+            enif_make_binary(env, &buffer));
+    } else if (frames_read == -EAGAIN) {
+        enif_release_binary(&buffer);
+        if (!alsa_pcm_nif_select(env, resource, ref)) {
+            return am_wait;
+        } else {
+            return enif_make_tuple2(env, am_wait, ref);
+        }
+        return am_wait;
+    } else {
+        return enif_make_tuple2(env, am_error, libasound_error_to_erl(env, frames_read));
     }
 }
 
@@ -703,6 +740,7 @@ static int alsa_pcm_nif_on_load(ErlNifEnv *env, void** priv_data, ERL_NIF_TERM l
     am_ebadfd = enif_make_atom(env, "ebadfd");
     am_eintr = enif_make_atom(env, "eintr");
     am_enoent = enif_make_atom(env, "enoent");
+    am_enomem = enif_make_atom(env, "enomem");
     am_enosys = enif_make_atom(env, "enosys");
     am_epipe = enif_make_atom(env, "epipe");
     am_estrpipe = enif_make_atom(env, "estrpipe");
@@ -754,6 +792,7 @@ static ErlNifFunc nif_funcs[] = {
     {"reset_nif", 1, alsa_pcm_nif_reset},
     {"resume_nif", 2, alsa_pcm_nif_resume},
     {"writei_nif", 4, alsa_pcm_nif_writei},
+    {"readi_nif", 3, alsa_pcm_nif_readi},
 };
 
 ERL_NIF_INIT(alsa_pcm, nif_funcs, alsa_pcm_nif_on_load, NULL, alsa_pcm_nif_on_upgrade, alsa_pcm_nif_on_unload);

@@ -11,7 +11,8 @@
     recover/2,
     reset/1,
     resume/2,
-    writei/4
+    writei/4,
+    readi/3
 ]).
 -export_type([
     pcm/0
@@ -172,6 +173,7 @@ reset_nif(_PCM) ->
     erlang:nif_error(not_loaded).
 
 
+-spec resume(pcm(), timeout()) -> ok | {error, error()}.
 resume(PCM, Timeout) ->
     ResumeRef = make_ref(),
     resume(PCM, ResumeRef, Timeout).
@@ -210,6 +212,7 @@ resume_nif(_PCM, _Ref) ->
     erlang:nif_error(not_loaded).
 
 
+-spec writei(pcm(), binary(), pos_integer(), timeout()) -> ok | {error, error()}.
 writei(PCM, Buffer, Frames, Timeout) ->
     WriteRef = make_ref(),
     writei(PCM, Buffer, Frames, WriteRef, Timeout).
@@ -217,31 +220,28 @@ writei(PCM, Buffer, Frames, Timeout) ->
 writei(PCM, Buffer, Frames, WriteRef, Timeout) ->
     StartTime = timestamp(),
     case writei_nif(PCM, Buffer, Frames, WriteRef) of
-        ok ->
+        {ok, FramesWritten, _BytesWritten} when FramesWritten =:= Frames ->
             ok;
-        {wait, undefined, FramesWritten, BytesWritten} ->
-            timer:sleep(1),
-            <<_:BytesWritten/binary, BufferRest/binary>> = Buffer,
-            writei(PCM,
-                BufferRest,
-                Frames - FramesWritten,
-                WriteRef,
+        {ok, FramesWritten, BytesWritten} when FramesWritten < Frames ->
+            <<_:BytesWritten/binary, BufferRemaining/binary>> = Buffer,
+            FramesRemaining = Frames - FramesWritten,
+            writei(PCM, BufferRemaining, FramesRemaining, WriteRef,
                 next_timeout(StartTime, Timeout));
-        {wait, WriteRef, FramesWritten, BytesWritten} ->
-            NewTimeout = next_timeout(StartTime, Timeout),
+        {wait, WriteRef} ->
+            ReceiveTimeout = next_timeout(StartTime, Timeout),
             receive
                 {select, PCM, WriteRef, _} ->
-                    <<_:BytesWritten/binary, BufferRest/binary>> = Buffer,
-                    writei(PCM,
-                        BufferRest,
-                        Frames - FramesWritten,
-                        WriteRef,
+                    writei(PCM, Buffer, Frames, WriteRef,
                         next_timeout(StartTime, Timeout))
             after
-                NewTimeout ->
+                ReceiveTimeout ->
                     writei_cancel(PCM, WriteRef),
                     {error, timeout}
             end;
+        wait ->
+            timer:sleep(1),
+            writei(PCM, Buffer, Frames, WriteRef,
+                next_timeout(StartTime, Timeout));
         {error, _} = Error ->
             Error
     end.
@@ -259,6 +259,51 @@ writei_cancel(_PCM, _WriteRef) ->
 writei_nif(_PCM, _Buffer, _Frames, _Ref) ->
     erlang:nif_error(not_loaded).
 
+
+-spec readi(pcm(), pos_integer(), timeout()) -> {ok, binary(), pos_integer()} | {error, error()}.
+readi(PCM, Frames, Timeout) when Frames > 0 ->
+    ReadRef = make_ref(),
+    readi(PCM, Frames, ReadRef, <<>>, 0, Timeout).
+
+readi(PCM, Frames, ReadRef, DataAcc, FramesAcc, Timeout) ->
+    StartTime = timestamp(),
+    case readi_nif(PCM, Frames, ReadRef) of
+        {ok, FramesRead, Data} when FramesRead =:= Frames ->
+            {ok, <<DataAcc/binary, Data/binary>>, FramesAcc + FramesRead};
+        {ok, FramesRead, Data} when FramesRead < Frames ->
+            readi(PCM, Frames - FramesRead, ReadRef, <<DataAcc/binary, Data/binary>>, FramesAcc + FramesRead,
+                next_timeout(StartTime, Timeout));
+        {wait, ReadRef} ->
+            NewTimeout = next_timeout(StartTime, Timeout),
+            receive
+                {select, PCM, ReadRef, _} ->
+                    readi(PCM, Frames, ReadRef, DataAcc, FramesAcc,
+                        next_timeout(StartTime, Timeout))
+            after
+                NewTimeout ->
+                    readi_cancel(PCM, ReadRef),
+                    {error, timeout}
+            end;
+        wait ->
+            timer:sleep(1),
+            readi(PCM, Frames, ReadRef, DataAcc, FramesAcc,
+                next_timeout(StartTime, Timeout));
+        {error, _} = Error ->
+            Error
+    end.
+
+readi_cancel(_PCM, _ReadRef) ->
+    % case select_cancel_nif(PCM, ReadRef) of
+    %     {error, select_sent} ->
+    %         select_flush(PCM, ReadRef);
+    %     Other ->
+    %         Other
+    % end.
+    ok.
+
+%% nif
+readi_nif(_PCM, _Frames, _Ref) ->
+    erlang:nif_error(not_loaded).
 
 %
 % Helpers
