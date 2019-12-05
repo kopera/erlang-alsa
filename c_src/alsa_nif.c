@@ -44,6 +44,7 @@ static ERL_NIF_TERM am_closed;
 static ERL_NIF_TERM am_eagain;
 static ERL_NIF_TERM am_ebadfd;
 static ERL_NIF_TERM am_eintr;
+static ERL_NIF_TERM am_enoent;
 static ERL_NIF_TERM am_enosys;
 static ERL_NIF_TERM am_epipe;
 static ERL_NIF_TERM am_estrpipe;
@@ -60,6 +61,7 @@ static ERL_NIF_TERM libasound_error_to_erl(ErlNifEnv *env, int error)
         case EAGAIN: return am_eagain;
         case EBADFD: return am_ebadfd;
         case EINTR: return am_eintr;
+        case ENOENT: return am_enoent;
         case ENOSYS: return am_enosys;
         case EPIPE: return am_epipe;
         case ESTRPIPE: return am_estrpipe;
@@ -83,6 +85,9 @@ static bool alsa_nif_get_error(ErlNifEnv *env, const ERL_NIF_TERM term, int *val
             return true;
         } else if (enif_is_identical(term, am_eintr)) {
             *value = -EINTR;
+            return true;
+        } else if (enif_is_identical(term, am_enoent)) {
+            *value = -ENOENT;
             return true;
         } else if (enif_is_identical(term, am_enosys)) {
             *value = -ENOSYS;
@@ -687,6 +692,7 @@ static int alsa_nif_on_load(ErlNifEnv *env, void** priv_data, ERL_NIF_TERM load_
     am_eagain = enif_make_atom(env, "eagain");
     am_ebadfd = enif_make_atom(env, "ebadfd");
     am_eintr = enif_make_atom(env, "eintr");
+    am_enoent = enif_make_atom(env, "enoent");
     am_enosys = enif_make_atom(env, "enosys");
     am_epipe = enif_make_atom(env, "epipe");
     am_estrpipe = enif_make_atom(env, "estrpipe");

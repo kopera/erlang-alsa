@@ -153,7 +153,7 @@ pcm_pause_nif(_PCM, _Pause) ->
 
 -spec pcm_recover(pcm(), error()) -> ok | {error, error()}.
 -type error() ::
-      eagain | ebadfd | eintr | enosys | epipe | estrpipe
+      eagain | ebadfd | eintr | enoent | enosys | epipe | estrpipe
     | pos_integer().
 pcm_recover(PCM, Error) ->
     pcm_recover_nif(PCM, Error, true).
