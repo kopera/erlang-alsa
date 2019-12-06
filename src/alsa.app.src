@@ -1,10 +1,13 @@
 {application, alsa, [
     {description, "Alsa libasound2 bindings"},
     {vsn, "git"},
-    {registered, []},
+    {registered, [alsa_sup, alsa_mixer_sup]},
+    {mod, {alsa_app, []}},
     {applications, [
         kernel,
-        stdlib
+        stdlib,
+
+        reg
     ]},
     {env,[]},
     {modules, []},

@@ -1,3 +1,4 @@
 /_build
 /_checkouts
 /priv/alsa_pcm_nif.so
+/priv/alsa_mixer_port
