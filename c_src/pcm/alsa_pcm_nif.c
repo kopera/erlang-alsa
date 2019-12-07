@@ -733,6 +733,38 @@ static ERL_NIF_TERM alsa_pcm_nif_readi(ErlNifEnv* env, int argc, const ERL_NIF_T
     }
 }
 
+static ERL_NIF_TERM alsa_pcm_nif_frames_to_bytes(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    alsa_pcm_nif_resource_t *resource;
+    if (!enif_get_resource(env, argv[0], alsa_pcm_nif_resource_type, (void**) &resource)) {
+        return enif_make_badarg(env);
+    }
+
+    snd_pcm_sframes_t frames;
+    if (!enif_get_long(env, argv[1], &frames)) {
+        return enif_make_badarg(env);
+    }
+
+    ssize_t bytes = snd_pcm_frames_to_bytes(resource->handle, frames) ;
+    return enif_make_long(env, bytes);
+}
+
+static ERL_NIF_TERM alsa_pcm_nif_samples_to_bytes(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    alsa_pcm_nif_resource_t *resource;
+    if (!enif_get_resource(env, argv[0], alsa_pcm_nif_resource_type, (void**) &resource)) {
+        return enif_make_badarg(env);
+    }
+
+    long samples;
+    if (!enif_get_long(env, argv[1], &samples)) {
+        return enif_make_badarg(env);
+    }
+
+    ssize_t bytes = snd_pcm_samples_to_bytes(resource->handle, samples) ;
+    return enif_make_long(env, bytes);
+}
+
 
 /* Initialization */
 
@@ -808,6 +840,9 @@ static ErlNifFunc nif_funcs[] = {
     {"resume_nif", 2, alsa_pcm_nif_resume},
     {"writei_nif", 4, alsa_pcm_nif_writei},
     {"readi_nif", 3, alsa_pcm_nif_readi},
+
+    {"frames_to_bytes_nif", 2, alsa_pcm_nif_frames_to_bytes},
+    {"samples_to_bytes_nif", 2, alsa_pcm_nif_samples_to_bytes},
 };
 
 ERL_NIF_INIT(alsa_pcm, nif_funcs, alsa_pcm_nif_on_load, NULL, alsa_pcm_nif_on_upgrade, alsa_pcm_nif_on_unload);

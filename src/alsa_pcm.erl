@@ -15,6 +15,10 @@
     writei/4,
     readi/3
 ]).
+-export([
+    frame_size/1,
+    sample_size/1
+]).
 -export_type([
     pcm/0
 ]).
@@ -313,6 +317,24 @@ readi_cancel(_PCM, _ReadRef) ->
 
 %% nif
 readi_nif(_PCM, _Frames, _Ref) ->
+    erlang:nif_error(not_loaded).
+
+
+-spec frame_size(pcm()) -> pos_integer().
+frame_size(PCM) ->
+    frames_to_bytes_nif(PCM, 1).
+
+%% nif
+frames_to_bytes_nif(_PCM, _Frames) ->
+    erlang:nif_error(not_loaded).
+
+
+-spec sample_size(pcm()) -> pos_integer().
+sample_size(PCM) ->
+    samples_to_bytes_nif(PCM, 1).
+
+%% nif
+samples_to_bytes_nif(_PCM, _Frames) ->
     erlang:nif_error(not_loaded).
 
 %
