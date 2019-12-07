@@ -6,6 +6,7 @@
     set_swparams/2,
     set_params/2,
     prepare/1,
+    drop/1,
     pause/1,
     unpause/1,
     recover/2,
@@ -136,6 +137,15 @@ prepare(PCM) ->
 
 %% nif
 prepare_nif(_PCM) ->
+    erlang:nif_error(not_loaded).
+
+
+-spec drop(pcm()) -> ok | {error, error()}.
+drop(PCM) ->
+    drop_nif(PCM).
+
+%% nif
+drop_nif(_PCM) ->
     erlang:nif_error(not_loaded).
 
 

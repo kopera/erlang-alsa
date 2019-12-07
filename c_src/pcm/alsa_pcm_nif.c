@@ -22,7 +22,7 @@ typedef struct {
     ErlNifMonitor           owner_monitor;
 
     snd_pcm_t              *handle;
-    atomic_flag             handle_closed; // replace with locking
+    atomic_flag             handle_closed;
 
     khash_t(fd_set)        *select_fds;
 } alsa_pcm_nif_resource_t;
@@ -555,6 +555,20 @@ static ERL_NIF_TERM alsa_pcm_nif_prepare(ErlNifEnv* env, int argc, const ERL_NIF
     return am_ok;
 }
 
+static ERL_NIF_TERM alsa_pcm_nif_drop(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    alsa_pcm_nif_resource_t *resource;
+    if (!enif_get_resource(env, argv[0], alsa_pcm_nif_resource_type, (void**) &resource)) {
+        return enif_make_badarg(env);
+    }
+
+    int ret = snd_pcm_drop(resource->handle);
+    if (ret < 0) {
+        return enif_make_tuple2(env, am_error, libasound_error_to_erl(env, ret));
+    }
+    return am_ok;
+}
+
 static ERL_NIF_TERM alsa_pcm_nif_pause(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
     alsa_pcm_nif_resource_t *resource;
@@ -787,6 +801,7 @@ static ErlNifFunc nif_funcs[] = {
     {"set_swparams_nif", 2, alsa_pcm_nif_set_swparams},
     {"set_params_nif", 7, alsa_pcm_nif_set_params},
     {"prepare_nif", 1, alsa_pcm_nif_prepare},
+    {"drop_nif", 1, alsa_pcm_nif_drop},
     {"pause_nif", 2, alsa_pcm_nif_pause},
     {"recover_nif", 3, alsa_pcm_nif_recover},
     {"reset_nif", 1, alsa_pcm_nif_reset},
