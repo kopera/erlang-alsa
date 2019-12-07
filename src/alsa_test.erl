@@ -1,3 +1,4 @@
+%% @hidden
 -module(alsa_test).
 -export([
     play/2,

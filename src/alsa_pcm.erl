@@ -26,6 +26,14 @@
 -on_load(init/0).
 
 
+%% @doc Opens a PCM. The returned PCM handle will be closed automatically if the
+%% opening process terminates.
+%%
+%% @param Device    ASCII identifier of the PCM handle
+%% @param Direction wanted stream direction, that is either `capture' for
+%%                  reading audio data from the audio device, or `playback' for
+%%                  writing audio data to the audio device.
+%% @returns a handle to the PCM device on success otherwise a posix error.
 -spec open(string() | binary(), playback | capture) -> {ok, pcm()} | {error, error()}.
 -opaque pcm() :: reference().
 open(Device, Direction) ->
@@ -39,6 +47,9 @@ open_nif(_Device, _Direction) ->
     erlang:nif_error(not_loaded).
 
 
+%% @doc Closes a previously opened PCM handle.
+%% @param PCM       the PCM handle to close
+%% @returns ok on succcess otherwise a posix error.
 -spec close(pcm()) -> ok | {error, error()}.
 close(PCM) ->
     close_nif(PCM).
@@ -110,6 +121,39 @@ set_swparams_nif(_PCM, _Params) ->
     erlang:nif_error(not_loaded).
 
 
+%% @doc Set the hardware and software parameters in a simple way. The following
+%%      parameters are all required:
+%%
+%% <dl>
+%%     <dt>access</dt>
+%%     <dd>The required {@link hwparam_access(). access} mode, that is either
+%%     rw_interleaved or rw_noninterleaved. Interleaved access means that the
+%%     channels data is multiplexed into the same buffer, and that {@link readi/3}
+%%     and {@link writei/4} are to be used. Non interleaves means that the channels
+%%     data is read/written to separate buffers, in which case {@link readn/3} and
+%%     {@link writen/4} are to be used.</dd>
+%%
+%%     <dt>format</dt>
+%%     <dd>The {@link hwparam_format(). sample format}. The format specifies how
+%%     the data in each sample is encoded.</dd>
+%%
+%%     <dt>channels</dt>
+%%     <dd>The number of channels. Must be a stictly positive integer.</dd>
+%%
+%%     <dt>rate</dt>
+%%     <dd>The sample rate, such as 44100 or 48000.</dd>
+%%
+%%     <dt>rate_resample</dt>
+%%     <dd>Whether to allow software resampling in case the provided sample rate
+%%     is not supported by the target device.</dd>
+%%
+%%     <dt>latency</dt>
+%%     <dd>Required overall latency in μs.</dd>
+%% </dl>
+%%
+%% @param PCM       the PCM handle
+%% @param Params    a map of the parameters to set.
+%% @returns ok on succcess otherwise a posix error.
 -spec set_params(pcm(), params()) -> ok | {error, error()}.
 -type params() :: #{
     access := hwparam_access(),
@@ -135,6 +179,9 @@ set_params_nif(_PCM, _Format, _Access, _Channels, _Rate, _Resample, _Latency) ->
     erlang:nif_error(not_loaded).
 
 
+%% @doc Prepare PCM for use.
+%% @param PCM       the PCM handle to prepare
+%% @returns ok on succcess otherwise a posix error.
 -spec prepare(pcm()) -> ok | {error, error()}.
 prepare(PCM) ->
     prepare_nif(PCM).
@@ -144,6 +191,11 @@ prepare_nif(_PCM) ->
     erlang:nif_error(not_loaded).
 
 
+%% @doc Stop a PCM dropping pending frames. This function stops the PCM
+%%      immediately. The pending samples on the buffer are ignored.
+%%
+%% @param PCM       the PCM handle
+%% @returns ok on succcess otherwise a posix error.
 -spec drop(pcm()) -> ok | {error, error()}.
 drop(PCM) ->
     drop_nif(PCM).
@@ -153,10 +205,20 @@ drop_nif(_PCM) ->
     erlang:nif_error(not_loaded).
 
 
+%% @doc Pause the PCM. Note that this function works only on the hardware which
+%%      supports pause feature.
+%%
+%% @param PCM       the PCM handle
+%% @returns ok on succcess otherwise a posix error.
 -spec pause(pcm()) -> ok | {error, error()}.
 pause(PCM) ->
     pause_nif(PCM, true).
 
+
+%% @doc Unpause a previously paused PCM.
+%% @see pause/1
+%% @param PCM       the PCM handle
+%% @returns ok on succcess otherwise a posix error.
 -spec unpause(pcm()) -> ok | {error, error()}.
 unpause(PCM) ->
     pause_nif(PCM, false).
@@ -166,6 +228,18 @@ pause_nif(_PCM, _Pause) ->
     erlang:nif_error(not_loaded).
 
 
+%% @doc Recover the stream state from an error or suspend. This functions
+%%      handles eintr (interrupted system call), epipe (overrun or underrun) and
+%%      estrpipe (stream is suspended) error codes trying to prepare given
+%%      stream for next I/O.
+%%
+%%      Note that this function returs the original error code when it is not
+%%      handled inside this function.
+%%
+%% @param PCM       the PCM handle
+%% @param Error     the previously returned error from which we are trying to
+%%                  recover.
+%% @returns ok on succcess otherwise a posix error.
 -spec recover(pcm(), error()) -> ok | {error, error()}.
 -type error() ::
       eagain | ebadfd | eintr | enoent | enosys | epipe | estrpipe
@@ -178,6 +252,13 @@ recover_nif(_PCM, _Error, _Silent) ->
     erlang:nif_error(not_loaded).
 
 
+%% @hidden
+%% @doc Reset the PCM position. This function resets the buffer and thus delay
+%%      to 0 while keeping the playback running. This will most propably result
+%%      in an underrun.
+%%
+%% @param PCM       the PCM handle
+%% @returns ok on succcess otherwise a posix error.
 -spec reset(pcm()) -> ok | {error, error()}.
 reset(PCM) ->
     reset_nif(PCM).
@@ -187,6 +268,15 @@ reset_nif(_PCM) ->
     erlang:nif_error(not_loaded).
 
 
+%% @hidden
+%% @doc Resume from suspend, no samples are lost. This function can be used when
+%%      the stream is in the suspend state to do the fine resume from this
+%%      state. Not all hardware supports this feature, when an enosys error is
+%%      returned, use the @{link prepare/1} function to recover.
+%%
+%% @param PCM       the PCM handle
+%% @param Timeout   timeout
+%% @returns ok on succcess otherwise a posix error.
 -spec resume(pcm(), timeout()) -> ok | {error, error()}.
 resume(PCM, Timeout) ->
     ResumeRef = make_ref(),
