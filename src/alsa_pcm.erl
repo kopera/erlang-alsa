@@ -29,7 +29,7 @@
 -spec open(string() | binary(), playback | capture) -> {ok, pcm()} | {error, error()}.
 -opaque pcm() :: reference().
 open(Device, Direction) ->
-    open_nif(unicode:characters_to_list(Device), case Direction of
+    open_nif(unicode:characters_to_list(Device, latin1), case Direction of
         playback -> 0;
         capture -> 1
     end).
