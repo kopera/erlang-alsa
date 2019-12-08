@@ -20,22 +20,19 @@ play(Device, Data) ->
         rate_resample => true,
         latency => 100000
     }),
-    Channels = 2,
-    Depth = 2,
-    Frames = byte_size(Data) div Channels div Depth,
-    play_i(PCM, Data, Frames),
+    play_i(PCM, Data),
     alsa_pcm:close(PCM).
 
 
-play_i(PCM, Data, Frames) ->
-    case alsa_pcm:writei(PCM, Data, Frames, infinity) of
+play_i(PCM, Data) ->
+    case alsa_pcm:writei(PCM, Data, infinity) of
         ok ->
             ok;
         {error, Error} ->
             io:format("writei failure: ~p (trying recovery)~n", [Error]),
             case alsa_pcm:recover(PCM, Error) of
                 ok ->
-                    play_i(PCM, Data, Frames);
+                    play_i(PCM, Data);
                 {error, Error} ->
                     exit(Error)
             end
@@ -55,21 +52,23 @@ record(Device, Duration) ->
         rate_resample => true,
         latency => 100000
     }),
-    Frames = duration_to_frames(#{rate => 48000, channels => 1}, Duration),
-    Data = record_i(PCM, Frames),
+    Size = alsa_pcm:frame_size(PCM) * duration_to_frames(#{rate => 48000, channels => 2}, Duration),
+    Data = record_i(PCM, Size, <<>>),
     alsa_pcm:close(PCM),
     Data.
 
 
-record_i(PCM, Frames) ->
-    case alsa_pcm:readi(PCM, Frames, infinity) of
-        {ok, Data, _FramesRead} ->
-            Data;
+record_i(PCM, Size, Acc) ->
+    case alsa_pcm:readi(PCM, infinity) of
+        {ok, Data} when byte_size(Data) >= Size ->
+            <<Acc/binary, Data/binary>>;
+        {ok, Data} ->
+            record_i(PCM, Size - byte_size(Data), <<Acc/binary, Data/binary>>);
         {error, Error} ->
             io:format("writei failure: ~p (trying recovery)~n", [Error]),
             case alsa_pcm:recover(PCM, Error) of
                 ok ->
-                    record_i(PCM, Frames);
+                    record_i(PCM, Size, Acc);
                 {error, Error} ->
                     exit(Error)
             end
