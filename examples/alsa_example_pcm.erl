@@ -1,5 +1,5 @@
 %% @hidden
--module(alsa_test).
+-module(alsa_example_pcm).
 -export([
     play/2,
     record/1,
@@ -52,6 +52,7 @@ record(Device, Duration) ->
         rate_resample => true,
         latency => 100000
     }),
+    ok = alsa_pcm:start(PCM),
     Size = alsa_pcm:frame_size(PCM) * duration_to_frames(#{rate => 48000, channels => 2}, Duration),
     Data = record_i(PCM, Size, <<>>),
     alsa_pcm:close(PCM),
