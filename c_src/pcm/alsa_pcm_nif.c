@@ -736,6 +736,7 @@ static ERL_NIF_TERM alsa_pcm_nif_readi(ErlNifEnv* env, int argc, const ERL_NIF_T
         }
         return am_wait;
     } else {
+        enif_release_binary(&buffer);
         return enif_make_tuple2(env, am_error, libasound_error_to_erl(env, frames_read));
     }
 }
