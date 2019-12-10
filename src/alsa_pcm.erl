@@ -21,7 +21,8 @@
     sample_size/1
 ]).
 -export_type([
-    pcm/0
+    pcm/0,
+    error/0
 ]).
 
 -on_load(init/0).
