@@ -13,7 +13,7 @@ Erlang alsa (libasound2) bindings
     Then type the following into the shell:
 
     ```erlang
-    alsa_output:main("default").
+    alsa_test:play("default", alsa_test:generate_noise(5000)).
     ```
 
     You should hear random audio coming from the default soundcard.
