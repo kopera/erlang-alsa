@@ -130,10 +130,10 @@ set_swparams_nif(_PCM, _Params) ->
 %%     <dt>access</dt>
 %%     <dd>The required {@link hwparam_access(). access} mode, that is either
 %%     rw_interleaved or rw_noninterleaved. Interleaved access means that the
-%%     channels data is multiplexed into the same buffer, and that {@link readi/3}
-%%     and {@link writei/4} are to be used. Non interleaves means that the channels
-%%     data is read/written to separate buffers, in which case {@link readn/3} and
-%%     {@link writen/4} are to be used.</dd>
+%%     channels data is multiplexed into the same buffer, and that {@link readi/2}
+%%     and {@link writei/3} are to be used. Non interleaves means that the channels
+%%     data is read/written to separate buffers, in which case {@link readn/2} and
+%%     {@link writen/3} are to be used.</dd>
 %%
 %%     <dt>format</dt>
 %%     <dd>The {@link hwparam_format(). sample format}. The format specifies how
