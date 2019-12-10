@@ -340,7 +340,7 @@ start_nif(_PCM) ->
     erlang:nif_error(not_loaded).
 
 
--spec writei(pcm(), binary(), timeout()) ->
+-spec writei(pcm(), binary(), timeout() | nowait) ->
       ok
     | {wait, {ready_writei, reference()}, Remaining :: binary()}
     | {error, incomplete_frame, Remaining :: binary()}
