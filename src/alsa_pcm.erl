@@ -481,6 +481,9 @@ timestamp() ->
 next_timeout(_, infinity = Timeout) ->
     Timeout;
 
+next_timeout(_, nowait = Timeout) ->
+    Timeout;
+
 next_timeout(StartTimestamp, Timeout) ->
     Elapsed = timestamp() - StartTimestamp,
     case Timeout - Elapsed of
