@@ -32,16 +32,29 @@ static ERL_NIF_TERM am_error;
 static ERL_NIF_TERM am_wait;
 
 static ERL_NIF_TERM am_undefined;
+static ERL_NIF_TERM am_other;
 
 static ERL_NIF_TERM am_true;
 static ERL_NIF_TERM am_false;
 
 static ERL_NIF_TERM am_closed;
-static ERL_NIF_TERM am_other;
 
+static ERL_NIF_TERM am_enoent;
 static ERL_NIF_TERM am_enomem;
 static ERL_NIF_TERM am_enotsup;
 static ERL_NIF_TERM am_eagain;
+
+static ERL_NIF_TERM am_type;
+static ERL_NIF_TERM am_boolean;
+static ERL_NIF_TERM am_integer;
+static ERL_NIF_TERM am_enumerated;
+static ERL_NIF_TERM am_bytes;
+
+static ERL_NIF_TERM am_count;
+static ERL_NIF_TERM am_min;
+static ERL_NIF_TERM am_max;
+static ERL_NIF_TERM am_step;
+static ERL_NIF_TERM am_items;
 
 static ERL_NIF_TERM am_card;
 static ERL_NIF_TERM am_mixer;
@@ -62,6 +75,7 @@ static ERL_NIF_TERM am_subdevice;
 static ERL_NIF_TERM libasound_error_to_erl(ErlNifEnv *env, int error)
 {
     switch (-error) {
+        case ENOENT: return am_enoent;
         case ENOMEM: return am_enomem;
         default: return enif_make_int(env, -error);
     }
@@ -157,7 +171,8 @@ static bool alsa_ctl_nif_get_ctl_elem_id(ErlNifEnv *env, const ERL_NIF_TERM term
         }
 
         enif_map_iterator_destroy(env, &iter);
-        return true;
+
+        return (snd_ctl_elem_id_get_name(elem_id)[0] != 0) || (snd_ctl_elem_id_get_numid(elem_id) != 0);
     }
 
     return false;
@@ -302,6 +317,132 @@ static ERL_NIF_TERM alsa_ctl_nif_make_ctl_elem_id(ErlNifEnv *env, const snd_ctl_
     return result;
 }
 
+static ERL_NIF_TERM alsa_ctl_nif_make_ctl_elem_info(ErlNifEnv *env, snd_ctl_t *handle, snd_ctl_elem_info_t *elem_info)
+{
+    snd_ctl_elem_type_t type = snd_ctl_elem_info_get_type(elem_info);
+    unsigned int count = snd_ctl_elem_info_get_count(elem_info);
+
+    switch (type) {
+        case SND_CTL_ELEM_TYPE_BOOLEAN: {
+            ERL_NIF_TERM keys[] = {
+                am_type,
+                am_count,
+            };
+            ERL_NIF_TERM values[] = {
+                am_boolean,
+                enif_make_uint(env, count),
+            };
+
+            ERL_NIF_TERM result;
+            static_assert(ARRAY_LENGTH(keys) == ARRAY_LENGTH(values), "key/value size mismatch");
+            enif_make_map_from_arrays(env, keys, values, ARRAY_LENGTH(keys), &result);
+            return result;
+        }
+        case SND_CTL_ELEM_TYPE_INTEGER: {
+            ERL_NIF_TERM keys[] = {
+                am_type,
+                am_count,
+                am_min,
+                am_max,
+                am_step,
+            };
+            ERL_NIF_TERM values[] = {
+                am_integer,
+                enif_make_uint(env, count),
+                enif_make_int(env, snd_ctl_elem_info_get_min(elem_info)),
+                enif_make_int(env, snd_ctl_elem_info_get_max(elem_info)),
+                enif_make_int(env, snd_ctl_elem_info_get_step(elem_info)),
+            };
+
+            ERL_NIF_TERM result;
+            static_assert(ARRAY_LENGTH(keys) == ARRAY_LENGTH(values), "key/value size mismatch");
+            enif_make_map_from_arrays(env, keys, values, ARRAY_LENGTH(keys), &result);
+            return result;
+        }
+        case SND_CTL_ELEM_TYPE_INTEGER64: {
+            ERL_NIF_TERM keys[] = {
+                am_type,
+                am_count,
+                am_min,
+                am_max,
+                am_step,
+            };
+            ERL_NIF_TERM values[] = {
+                am_integer,
+                enif_make_uint(env, count),
+                enif_make_int64(env, snd_ctl_elem_info_get_min64(elem_info)),
+                enif_make_int64(env, snd_ctl_elem_info_get_max64(elem_info)),
+                enif_make_int64(env, snd_ctl_elem_info_get_step64(elem_info)),
+            };
+
+            ERL_NIF_TERM result;
+            static_assert(ARRAY_LENGTH(keys) == ARRAY_LENGTH(values), "key/value size mismatch");
+            enif_make_map_from_arrays(env, keys, values, ARRAY_LENGTH(keys), &result);
+            return result;
+        }
+        case SND_CTL_ELEM_TYPE_ENUMERATED: {
+            unsigned int items_count = snd_ctl_elem_info_get_items(elem_info);
+            unsigned int item_index;
+
+            ERL_NIF_TERM items = enif_make_list(env, 0);
+            for (item_index = items_count; item_index > 0; item_index--) {
+                snd_ctl_elem_info_set_item(elem_info, item_index - 1);
+                if ((snd_ctl_elem_info(handle, elem_info)) >= 0) {
+                    const char* item_name = snd_ctl_elem_info_get_item_name(elem_info);
+                    items = enif_make_list_cell(env,
+                        enif_make_string(env, item_name, ERL_NIF_LATIN1),
+                        items);
+                }
+            }
+
+            ERL_NIF_TERM keys[] = {
+                am_type,
+                am_count,
+                am_items,
+            };
+            ERL_NIF_TERM values[] = {
+                am_enumerated,
+                enif_make_uint(env, count),
+                items,
+            };
+
+            ERL_NIF_TERM result;
+            static_assert(ARRAY_LENGTH(keys) == ARRAY_LENGTH(values), "key/value size mismatch");
+            enif_make_map_from_arrays(env, keys, values, ARRAY_LENGTH(keys), &result);
+            return result;
+        }
+        case SND_CTL_ELEM_TYPE_BYTES: {
+            ERL_NIF_TERM keys[] = {
+                am_type,
+                am_count,
+            };
+            ERL_NIF_TERM values[] = {
+                am_bytes,
+                enif_make_uint(env, count),
+            };
+
+            ERL_NIF_TERM result;
+            static_assert(ARRAY_LENGTH(keys) == ARRAY_LENGTH(values), "key/value size mismatch");
+            enif_make_map_from_arrays(env, keys, values, ARRAY_LENGTH(keys), &result);
+            return result;
+        }
+        default: {
+            ERL_NIF_TERM keys[] = {
+                am_type,
+                am_count,
+            };
+            ERL_NIF_TERM values[] = {
+                am_other,
+                enif_make_uint(env, count),
+            };
+
+            ERL_NIF_TERM result;
+            static_assert(ARRAY_LENGTH(keys) == ARRAY_LENGTH(values), "key/value size mismatch");
+            enif_make_map_from_arrays(env, keys, values, ARRAY_LENGTH(keys), &result);
+            return result;
+        }
+    }
+}
 
 static ERL_NIF_TERM alsa_ctl_nif_make_ctl_elem_value(ErlNifEnv *env, snd_ctl_t *handle, snd_ctl_elem_info_t *elem_info, snd_ctl_elem_value_t *elem_value)
 {
@@ -521,10 +662,10 @@ static ERL_NIF_TERM alsa_ctl_nif_elem_list(ErlNifEnv* env, int argc, const ERL_N
 
     unsigned int i;
     ERL_NIF_TERM result = enif_make_list(env, 0);
-    for (i = 0; i < elem_count; ++i) {
+    for (i = elem_count; i > 0; i--) {
         snd_ctl_elem_id_t *elem_id;
         snd_ctl_elem_id_alloca(&elem_id);
-        snd_ctl_elem_list_get_id(elem_list, i, elem_id);
+        snd_ctl_elem_list_get_id(elem_list, i - 1, elem_id);
 
         result = enif_make_list_cell(env,
             alsa_ctl_nif_make_ctl_elem_id(env, elem_id),
@@ -534,6 +675,32 @@ static ERL_NIF_TERM alsa_ctl_nif_elem_list(ErlNifEnv* env, int argc, const ERL_N
     snd_ctl_elem_list_free_space(elem_list);
 
     return enif_make_tuple2(env, am_ok, result);
+}
+
+static ERL_NIF_TERM alsa_ctl_nif_elem_info(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    int ret;
+
+    alsa_ctl_nif_resource_t *resource;
+    if (!enif_get_resource(env, argv[0], alsa_ctl_nif_resource_type, (void**) &resource)) {
+        return enif_make_badarg(env);
+    }
+
+    snd_ctl_elem_id_t *elem_id;
+    snd_ctl_elem_id_alloca(&elem_id);
+    if (!alsa_ctl_nif_get_ctl_elem_id(env, argv[1], elem_id)) {
+        return enif_make_badarg(env);
+    }
+
+    snd_ctl_elem_info_t *elem_info;
+    snd_ctl_elem_info_alloca(&elem_info);
+    snd_ctl_elem_info_set_id(elem_info, elem_id);
+    ret = snd_ctl_elem_info(resource->handle, elem_info);
+    if (ret != 0) {
+        return enif_make_tuple2(env, am_error, libasound_error_to_erl(env, ret));
+    }
+
+    return alsa_ctl_nif_make_ctl_elem_info(env, resource->handle, elem_info);
 }
 
 static ERL_NIF_TERM alsa_ctl_nif_elem_read(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
@@ -569,7 +736,6 @@ static ERL_NIF_TERM alsa_ctl_nif_elem_read(ErlNifEnv* env, int argc, const ERL_N
 
     return alsa_ctl_nif_make_ctl_elem_value(env, resource->handle, elem_info, elem_value);
 }
-
 
 static ERL_NIF_TERM alsa_ctl_nif_elem_write(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
@@ -610,7 +776,6 @@ static ERL_NIF_TERM alsa_ctl_nif_elem_write(ErlNifEnv* env, int argc, const ERL_
 }
 
 
-
 /* Initialization */
 
 static int alsa_ctl_nif_on_load(ErlNifEnv *env, void** priv_data, ERL_NIF_TERM load_info)
@@ -621,16 +786,29 @@ static int alsa_ctl_nif_on_load(ErlNifEnv *env, void** priv_data, ERL_NIF_TERM l
     am_wait = enif_make_atom(env, "wait");
 
     am_undefined = enif_make_atom(env, "undefined");
+    am_other = enif_make_atom(env, "other");
 
     am_true = enif_make_atom(env, "true");
     am_false = enif_make_atom(env, "false");
 
     am_closed = enif_make_atom(env, "closed");
-    am_other = enif_make_atom(env, "other");
 
+    am_enoent = enif_make_atom(env, "enoent");
     am_enomem = enif_make_atom(env, "enomem");
     am_enotsup = enif_make_atom(env, "enotsup");
     am_eagain = enif_make_atom(env, "eagain");
+
+    am_type = enif_make_atom(env, "type");
+    am_boolean = enif_make_atom(env, "boolean");
+    am_integer = enif_make_atom(env, "integer");
+    am_enumerated = enif_make_atom(env, "enumerated");
+    am_bytes = enif_make_atom(env, "bytes");
+
+    am_count = enif_make_atom(env, "count");
+    am_min = enif_make_atom(env, "min");
+    am_max = enif_make_atom(env, "max");
+    am_step = enif_make_atom(env, "step");
+    am_items = enif_make_atom(env, "items");
 
     am_card = enif_make_atom(env, "card");
     am_mixer = enif_make_atom(env, "mixer");
@@ -682,6 +860,7 @@ static ErlNifFunc nif_funcs[] = {
     {"close_nif", 1, alsa_ctl_nif_close},
     // {"read_event_nif", 2, alsa_ctl_nif_read_event},
     {"elem_list_nif", 1, alsa_ctl_nif_elem_list, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"elem_info_nif", 2, alsa_ctl_nif_elem_info, ERL_NIF_DIRTY_JOB_IO_BOUND},
     {"elem_read_nif", 2, alsa_ctl_nif_elem_read, ERL_NIF_DIRTY_JOB_IO_BOUND},
     {"elem_write_nif", 3, alsa_ctl_nif_elem_write, ERL_NIF_DIRTY_JOB_IO_BOUND},
 };

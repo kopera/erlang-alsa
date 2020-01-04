@@ -5,6 +5,7 @@
 ]).
 -export([
     elem_list/1,
+    elem_info/2,
     elem_read/2,
     elem_write/3
 ]).
@@ -65,19 +66,30 @@ elem_list_nif(_CTL) ->
     erlang:nif_error(not_loaded).
 
 
+%% @doc Get a CTL element info.
+%% @param CTL   the CTL handle
+%% @param Id    the element identifier
+-spec elem_info(ctl(), elem_id_matcher()) -> {ok, elem_info()} | {error, Error}
+    when Error :: pos_integer() | enotsup.
+-type elem_info() ::
+      #{type := boolean, count := non_neg_integer()}
+    | #{type := integer, count := non_neg_integer(), min := integer(), max := integer()}
+    | #{type := enumerated, count := non_neg_integer(), items := [string()]}
+    | #{type := bytes, count := non_neg_integer()}.
+elem_info(CTL, Id) ->
+    elem_info_nif(CTL, Id).
+
+%% nif
+elem_info_nif(_CTL, _Id) ->
+    erlang:nif_error(not_loaded).
+
+
 %% @doc Get a CTL element value.
 %% @param CTL   the CTL handle
 %% @param Id    the element identifier
 -spec elem_read(ctl(), elem_id_matcher()) -> {ok, elem_value()} | {error, Error}
     when Error :: pos_integer() | enotsup.
--type elem_id_matcher() :: #{
-    numid => integer(),
-    interface => card | mixer | pcm | rawmidi | timer | sequencer,
-    name => string(),
-    index => non_neg_integer(),
-    device => non_neg_integer(),
-    subdevice => non_neg_integer()
-}.
+-type elem_id_matcher() :: #{numid := integer()} | #{name := string()}.
 -type elem_value() :: binary() | tuple().
 elem_read(CTL, Id) ->
     elem_read_nif(CTL, Id).
