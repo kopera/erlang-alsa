@@ -297,7 +297,7 @@ static ERL_NIF_TERM alsa_pcm_nif_open(ErlNifEnv *env, int argc, const ERL_NIF_TE
     enif_self(env, &owner);
 
     alsa_pcm_nif_resource_t *resource = alsa_pcm_nif_resource_new(owner, handle);
-    if (enif_monitor_process(env, resource, &owner, &resource->owner_monitor)) {
+    if (enif_monitor_process(env, resource, &owner, &resource->owner_monitor) != 0) {
         enif_release_resource(resource);
         snd_pcm_close(handle);
         return enif_make_badarg(env);
