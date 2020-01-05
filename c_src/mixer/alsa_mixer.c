@@ -233,12 +233,14 @@ static void erlport_handle_set_playback_volume_all(const erlport_t *port, unsign
     int arity;
     if (ei_decode_tuple_header(message, message_index, &arity) < 0 || arity != 2) {
         erlport_reply_error(port, req_id, "malformed_request");
+        return;
     }
 
     char* element_name;
     unsigned long element_index;
     if (erlport_decode_element_id(message, message_index, &element_name, &element_index) < 0) {
         erlport_reply_error(port, req_id, "malformed_request");
+        return;
     }
     snd_mixer_selem_id_alloca(&sid);
     snd_mixer_selem_id_set_name(sid, element_name);
@@ -249,17 +251,21 @@ static void erlport_handle_set_playback_volume_all(const erlport_t *port, unsign
     long volume;
     if (ei_decode_long(message, message_index, &volume) < 0) {
         erlport_reply_error(port, req_id, "malformed_request");
+        return;
     }
 
     if (elem) {
         if (snd_mixer_selem_set_playback_volume_all(elem, volume) < 0) {
             erlport_reply_error(port, req_id, "bad_request");
+            return;
         } else {
             erlport_reply_ok0(port, req_id);
             notify_alsa_mixer_event("update", elem);
+            return;
         }
     } else {
         erlport_reply_error(port, req_id, "not_found");
+        return;
     }
 }
 
@@ -271,12 +277,14 @@ static void erlport_handle_set_playback_switch_all(const erlport_t *port, unsign
     int arity;
     if (ei_decode_tuple_header(message, message_index, &arity) < 0 || arity != 2) {
         erlport_reply_error(port, req_id, "malformed_request");
+        return;
     }
 
     char* element_name;
     unsigned long element_index;
     if (erlport_decode_element_id(message, message_index, &element_name, &element_index) < 0) {
         erlport_reply_error(port, req_id, "malformed_request");
+        return;
     }
     snd_mixer_selem_id_alloca(&sid);
     snd_mixer_selem_id_set_name(sid, element_name);
@@ -287,17 +295,21 @@ static void erlport_handle_set_playback_switch_all(const erlport_t *port, unsign
     char switch_value[MAXATOMLEN];
     if (ei_decode_atom(message, message_index, switch_value) < 0) {
         erlport_reply_error(port, req_id, "malformed_request");
+        return;
     }
 
     if (elem) {
         if (snd_mixer_selem_set_playback_switch_all(elem, strcmp(switch_value, "on") == 0) < 0) {
             erlport_reply_error(port, req_id, "bad_request");
+            return;
         } else {
             erlport_reply_ok0(port, req_id);
             notify_alsa_mixer_event("update", elem);
+            return;
         }
     } else {
         erlport_reply_error(port, req_id, "not_found");
+        return;
     }
 }
 
