@@ -13,7 +13,7 @@ jobs:
 
     steps:
     - name: Install build dependencies
-      run: sudo apt install -y build-essential libasound2-dev 
+      run: apt install -y build-essential libasound2-dev 
     - uses: actions/checkout@v1
     - name: Compile
       run: rebar3 compile
