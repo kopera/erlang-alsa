@@ -12,8 +12,10 @@ jobs:
       image: erlang:22.0.7
 
     steps:
-    - name: Install build dependencies
-      run: apt install -y build-essential libasound2-dev 
+    - name: Update apt cache
+      run: apt-get update
+    - name: Install packages
+      run: apt-get install -y build-essential libasound2-dev 
     - uses: actions/checkout@v1
     - name: Compile
       run: rebar3 compile
