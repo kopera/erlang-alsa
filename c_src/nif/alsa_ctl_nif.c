@@ -336,7 +336,7 @@ static ERL_NIF_TERM alsa_ctl_nif_make_ctl_elem_info(ErlNifEnv *env, snd_ctl_t *h
             ERL_NIF_TERM result;
             static_assert(ARRAY_LENGTH(keys) == ARRAY_LENGTH(values), "key/value size mismatch");
             enif_make_map_from_arrays(env, keys, values, ARRAY_LENGTH(keys), &result);
-            return result;
+            return enif_make_tuple2(env, am_ok, result);
         }
         case SND_CTL_ELEM_TYPE_INTEGER: {
             ERL_NIF_TERM keys[] = {
@@ -357,7 +357,7 @@ static ERL_NIF_TERM alsa_ctl_nif_make_ctl_elem_info(ErlNifEnv *env, snd_ctl_t *h
             ERL_NIF_TERM result;
             static_assert(ARRAY_LENGTH(keys) == ARRAY_LENGTH(values), "key/value size mismatch");
             enif_make_map_from_arrays(env, keys, values, ARRAY_LENGTH(keys), &result);
-            return result;
+            return enif_make_tuple2(env, am_ok, result);
         }
         case SND_CTL_ELEM_TYPE_INTEGER64: {
             ERL_NIF_TERM keys[] = {
@@ -378,7 +378,7 @@ static ERL_NIF_TERM alsa_ctl_nif_make_ctl_elem_info(ErlNifEnv *env, snd_ctl_t *h
             ERL_NIF_TERM result;
             static_assert(ARRAY_LENGTH(keys) == ARRAY_LENGTH(values), "key/value size mismatch");
             enif_make_map_from_arrays(env, keys, values, ARRAY_LENGTH(keys), &result);
-            return result;
+            return enif_make_tuple2(env, am_ok, result);
         }
         case SND_CTL_ELEM_TYPE_ENUMERATED: {
             unsigned int items_count = snd_ctl_elem_info_get_items(elem_info);
@@ -409,7 +409,7 @@ static ERL_NIF_TERM alsa_ctl_nif_make_ctl_elem_info(ErlNifEnv *env, snd_ctl_t *h
             ERL_NIF_TERM result;
             static_assert(ARRAY_LENGTH(keys) == ARRAY_LENGTH(values), "key/value size mismatch");
             enif_make_map_from_arrays(env, keys, values, ARRAY_LENGTH(keys), &result);
-            return result;
+            return enif_make_tuple2(env, am_ok, result);
         }
         case SND_CTL_ELEM_TYPE_BYTES: {
             ERL_NIF_TERM keys[] = {
@@ -424,7 +424,7 @@ static ERL_NIF_TERM alsa_ctl_nif_make_ctl_elem_info(ErlNifEnv *env, snd_ctl_t *h
             ERL_NIF_TERM result;
             static_assert(ARRAY_LENGTH(keys) == ARRAY_LENGTH(values), "key/value size mismatch");
             enif_make_map_from_arrays(env, keys, values, ARRAY_LENGTH(keys), &result);
-            return result;
+            return enif_make_tuple2(env, am_ok, result);
         }
         default: {
             ERL_NIF_TERM keys[] = {
@@ -439,7 +439,7 @@ static ERL_NIF_TERM alsa_ctl_nif_make_ctl_elem_info(ErlNifEnv *env, snd_ctl_t *h
             ERL_NIF_TERM result;
             static_assert(ARRAY_LENGTH(keys) == ARRAY_LENGTH(values), "key/value size mismatch");
             enif_make_map_from_arrays(env, keys, values, ARRAY_LENGTH(keys), &result);
-            return result;
+            return enif_make_tuple2(env, am_ok, result);
         }
     }
 }
@@ -451,11 +451,11 @@ static ERL_NIF_TERM alsa_ctl_nif_make_ctl_elem_value(ErlNifEnv *env, snd_ctl_t *
     unsigned int i;
 
     if (type == SND_CTL_ELEM_TYPE_BYTES) {
-        ERL_NIF_TERM result;
-        unsigned char* result_buffer = enif_make_new_binary(env, count, &result);
-        if (result_buffer != NULL) {
-            memcpy(result_buffer, snd_ctl_elem_value_get_bytes(elem_value), count);
-            return result;
+        ERL_NIF_TERM binary;
+        unsigned char* binary_buffer = enif_make_new_binary(env, count, &binary);
+        if (binary_buffer != NULL) {
+            memcpy(binary_buffer, snd_ctl_elem_value_get_bytes(elem_value), count);
+            return enif_make_tuple2(env, am_ok, binary);
         } else {
             return enif_make_tuple2(env, am_error, am_enomem);
         }
@@ -496,7 +496,7 @@ static ERL_NIF_TERM alsa_ctl_nif_make_ctl_elem_value(ErlNifEnv *env, snd_ctl_t *
         }
     }
 
-    return enif_make_tuple_from_array(env, values, count);
+    return enif_make_tuple2(env, am_ok, enif_make_tuple_from_array(env, values, count));
 }
 
 /* Resources */
