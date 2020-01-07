@@ -208,7 +208,7 @@ static bool alsa_ctl_nif_get_ctl_elem_value(ErlNifEnv *env, const ERL_NIF_TERM t
 
     if (type == SND_CTL_ELEM_TYPE_BYTES) {
         ErlNifBinary bin;
-        if (!enif_inspect_binary(env, term, &bin) || bin.size != count) {
+        if (!enif_inspect_binary(env, term, &bin) || bin.size != count || count > 512 /* alsa api has a limitation of 512 bytes */) {
             return false;
         }
         for (i = 0; i < count; i++) {
