@@ -1,5 +1,7 @@
+/.rebar3
 /_build
 /_checkouts
+/ebin
 /priv/alsa_ctl_nif.so
 /priv/alsa_pcm_nif.so
 /priv/alsa_mixer_port
