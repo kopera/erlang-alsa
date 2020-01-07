@@ -51,7 +51,7 @@ open_nif(_Device, _Direction) ->
 
 %% @doc Closes a previously opened PCM handle.
 %% @param PCM       the PCM handle to close
-%% @returns ok on succcess otherwise a posix error.
+%% @returns ok on success otherwise a posix error.
 -spec close(pcm()) -> ok | {error, error()}.
 close(PCM) ->
     close_nif(PCM).
@@ -155,7 +155,7 @@ set_swparams_nif(_PCM, _Params) ->
 %%
 %% @param PCM       the PCM handle
 %% @param Params    a map of the parameters to set.
-%% @returns ok on succcess otherwise a posix error.
+%% @returns ok on success otherwise a posix error.
 -spec set_params(pcm(), params()) -> ok | {error, error()}.
 -type params() :: #{
     access := hwparam_access(),
@@ -183,7 +183,7 @@ set_params_nif(_PCM, _Format, _Access, _Channels, _Rate, _Resample, _Latency) ->
 
 %% @doc Prepare PCM for use.
 %% @param PCM       the PCM handle to prepare
-%% @returns ok on succcess otherwise a posix error.
+%% @returns ok on success otherwise a posix error.
 -spec prepare(pcm()) -> ok | {error, error()}.
 prepare(PCM) ->
     prepare_nif(PCM).
@@ -197,7 +197,7 @@ prepare_nif(_PCM) ->
 %%      immediately. The pending samples on the buffer are ignored.
 %%
 %% @param PCM       the PCM handle
-%% @returns ok on succcess otherwise a posix error.
+%% @returns ok on success otherwise a posix error.
 -spec drop(pcm()) -> ok | {error, error()}.
 drop(PCM) ->
     drop_nif(PCM).
@@ -211,7 +211,7 @@ drop_nif(_PCM) ->
 %%      supports pause feature.
 %%
 %% @param PCM       the PCM handle
-%% @returns ok on succcess otherwise a posix error.
+%% @returns ok on success otherwise a posix error.
 -spec pause(pcm()) -> ok | {error, error()}.
 pause(PCM) ->
     pause_nif(PCM, true).
@@ -220,7 +220,7 @@ pause(PCM) ->
 %% @doc Unpause a previously paused PCM.
 %% @see pause/1
 %% @param PCM       the PCM handle
-%% @returns ok on succcess otherwise a posix error.
+%% @returns ok on success otherwise a posix error.
 -spec unpause(pcm()) -> ok | {error, error()}.
 unpause(PCM) ->
     pause_nif(PCM, false).
@@ -241,7 +241,7 @@ pause_nif(_PCM, _Pause) ->
 %% @param PCM       the PCM handle
 %% @param Error     the previously returned error from which we are trying to
 %%                  recover.
-%% @returns ok on succcess otherwise a posix error.
+%% @returns ok on success otherwise a posix error.
 -spec recover(pcm(), error()) -> ok | {error, error()}.
 -type error() ::
       eagain | ebadfd | eintr | enoent | enosys | epipe | estrpipe
@@ -260,7 +260,7 @@ recover_nif(_PCM, _Error, _Silent) ->
 %%      in an underrun.
 %%
 %% @param PCM       the PCM handle
-%% @returns ok on succcess otherwise a posix error.
+%% @returns ok on success otherwise a posix error.
 -spec reset(pcm()) -> ok | {error, error()}.
 reset(PCM) ->
     reset_nif(PCM).
@@ -278,7 +278,7 @@ reset_nif(_PCM) ->
 %%
 %% @param PCM       the PCM handle
 %% @param Timeout   a timeout or `nowait'
-%% @returns ok on succcess otherwise a posix error. If `nowait' is specified
+%% @returns ok on success otherwise a posix error. If `nowait' is specified
 %%          as timeout, this function will return `{wait, {ready_resume, Reference}}',
 %%          at which point, the caller should wait for the `{ready_resume, Reference}'
 %%          message to be delivered to its message box before calling this
@@ -331,7 +331,7 @@ resume_nif(_PCM, _Ref) ->
 %%      However, you need to call this function in capture mode.
 %%
 %% @param PCM       the PCM handle
-%% @returns ok on succcess otherwise a posix error.
+%% @returns ok on success otherwise a posix error.
 -spec start(pcm()) -> ok | {error, error()}.
 start(PCM) ->
     start_nif(PCM).

@@ -39,26 +39,30 @@ link_verbose_0 = @echo " LD    " $(@F);
 link_verbose = $(link_verbose_$(V))
 
 # Files
-SOURCES := \
-	alsa_pcm_nif.c
-
 HEADERS := $(wildcard *.h)
-OBJECTS = $(addprefix _build/, $(addsuffix .o, $(basename $(SOURCES))))
 
-all: $(BASEDIR)/priv/alsa_pcm_nif.so
+# Rules
+.PHONY: install
+install: _build/alsa_pcm_nif.so _build/alsa_ctl_nif.so | $(BASEDIR)/priv/
+	cp $^ $(BASEDIR)/priv
 
-$(BASEDIR)/priv/alsa_pcm_nif.so: $(OBJECTS) | $(BASEDIR)/priv/
-	$(link_verbose) $(CC) $(OBJECTS) $(LDFLAGS) -o "$@"
+.PHONY: all
+all: _build/alsa_pcm_nif.so _build/alsa_ctl_nif.so
 
-$(BASEDIR)/priv/:
-	@mkdir -p "$@"
+_build/%.so: _build/%.o  $(MAKEFILE_LIST) | _build/
+	$(link_verbose) $(CC) "$<" $(LDFLAGS) -o "$@"
 
 _build/%.o: %.c $(HEADERS) $(MAKEFILE_LIST) | _build/
 	$(c_verbose) $(CC) $(CFLAGS) $(CPPFLAGS) -c "$<" -o "$@"
 
 _build/:
-	@mkdir -p "$@"
+	mkdir -p "$@"
 
+$(BASEDIR)/priv/:
+	mkdir -p "$@"
+
+.PHONY: clean
 clean:
-	@rm -f "$(BASEDIR)/priv/alsa_pcm_nif.so"
-	@rm -Rf "_build/"
+	rm -f "$(BASEDIR)/priv/alsa_pcm_nif.so"
+	rm -f "$(BASEDIR)/priv/alsa_ctl_nif.so"
+	rm -Rf "_build/"
