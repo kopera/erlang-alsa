@@ -103,7 +103,7 @@ elem_read_nif(_CTL, _Id) ->
 %% @param CTL   the CTL handle
 %% @param Id    the element identifier
 %% @param Value the new element value
--spec elem_write(ctl(), elem_id(), elem_value()) -> ok | {error, Error}
+-spec elem_write(ctl(), elem_id_matcher(), elem_value()) -> ok | {error, Error}
     when Error :: pos_integer() | enotsup.
 elem_write(CTL, Id, Value) ->
     elem_write_nif(CTL, Id, Value).
