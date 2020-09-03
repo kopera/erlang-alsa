@@ -4,6 +4,7 @@
     close/1,
     set_hwparams/2,
     set_swparams/2,
+    get_swparams/1,
     set_params/2,
     prepare/1,
     drop/1,
@@ -109,17 +110,69 @@ set_hwparams_nif(_PCM, _Params) ->
     erlang:nif_error(not_loaded).
 
 
--spec set_swparams(pcm(), swparams()) -> ok | {error, error()}.
--type swparams() :: #{
+%% @doc Set the software parameters
+%%
+%% <dl>
+%%     <dt>avail_min</dt>
+%%     <dd>Set avail min inside a software configuration container. The valid
+%%      values are determined by the specific hardware. Most PC sound cards
+%%      can only accept power of 2 frame counts (i.e. 512, 1024, 2048).</dd>
+%%
+%%     <dt>start_threshold</dt>
+%%     <dd>PCM is automatically started when playback frames available to PCM
+%%     are >= `start_threshold` or when requested capture frames are >= `start_threshold`.</dd>
+%%
+%%     <dt>stop_threshold</dt>
+%%     <dd>PCM is automatically stopped an underrun/overrun state when available frames is >= `stop_threshold`.
+%%     If the stop threshold is equal to boundary then automatic stop will be disabled (thus device will do
+%%     the endless loop in the ring buffer).</dd>
+%%
+%%     <dt>silence_threshold</dt>
+%%     <dd>A portion of playback buffer is overwritten with silence when playback underrun is
+%%     nearer than silence threshold.</dd>
+%%
+%%     <dt>silence_size</dt>
+%%     <dd>A portion of playback buffer is overwritten with silence when playback underrun is nearer
+%%     than silence threshold (see snd_pcm_sw_params_set_silence_threshold) The special case is when
+%%     silence size value is equal or greater than boundary. The unused portion of the ring buffer
+%%     (initial written samples are untouched) is filled with silence at start. Later, only just
+%%     processed sample area is filled with silence. Note: silence_threshold must be set to zero.</dd>
+%%
+%% </dl>
+%%
+%% @param PCM       the PCM handle
+%% @param Params    a map of the parameters to set.
+%% @returns ok on success otherwise a posix error.
+-spec set_swparams(pcm(), swparams_options()) -> ok | {error, error()}.
+-type swparams_options() :: #{
     avail_min => pos_integer(),
     start_threshold => pos_integer(),
-    stop_threshold => pos_integer()
+    stop_threshold => pos_integer(),
+    silence_threshold => pos_integer(),
+    silence_size => pos_integer()
 }.
 set_swparams(PCM, Params) ->
     set_swparams_nif(PCM, maps:to_list(Params)).
 
 %% nif
 set_swparams_nif(_PCM, _Params) ->
+    erlang:nif_error(not_loaded).
+
+
+-spec get_swparams(pcm()) -> {ok, swparams()} | {error, error()}.
+-type swparams() :: #{
+    avail_min := pos_integer(),
+    boundary := pos_integer(),
+    start_threshold := pos_integer(),
+    stop_threshold := pos_integer(),
+    silence_threshold := pos_integer(),
+    silence_size := pos_integer()
+}.
+get_swparams(PCM) ->
+    get_swparams_nif(PCM).
+
+%% nif
+get_swparams_nif(_PCM) ->
     erlang:nif_error(not_loaded).
 
 

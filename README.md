@@ -36,6 +36,12 @@ your `.app.src` file:
 For usage please refer to the examples in the examples directory. You can also
 test the examples directly from the shell:
 
+```
+$ rebar3 shell
+```
+
+And then, once inside the erlang shell:
+
 ```erlang
 1> c("examples/alsa_example_pcm.erl").
 {ok,alsa_example_pcm}

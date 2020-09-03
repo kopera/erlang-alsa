@@ -53,6 +53,12 @@ static ERL_NIF_TERM am_estrpipe;
 static ERL_NIF_TERM am_rw_interleaved;
 static ERL_NIF_TERM am_rw_noninterleaved;
 
+static ERL_NIF_TERM am_avail_min;
+static ERL_NIF_TERM am_boundary;
+static ERL_NIF_TERM am_start_threshold;
+static ERL_NIF_TERM am_stop_threshold;
+static ERL_NIF_TERM am_silence_threshold;
+static ERL_NIF_TERM am_silence_size;
 
 /* Helpers */
 
@@ -449,12 +455,12 @@ static ERL_NIF_TERM alsa_pcm_nif_set_swparams(ErlNifEnv* env, int argc, const ER
             return enif_make_badarg(env);
         }
 
-        char name[256];
-        if (!enif_get_atom(env, fields[0], name, ARRAY_LENGTH(name), ERL_NIF_LATIN1)) {
-            return enif_make_badarg(env);
-        }
+        ERL_NIF_TERM name = fields[0];
+        // if (!enif_get_atom(env, fields[0], name, ARRAY_LENGTH(name), ERL_NIF_LATIN1)) {
+        //     return enif_make_badarg(env);
+        // }
 
-        if (strcmp("avail_min", name) == 0) {
+        if (enif_is_identical(name, am_avail_min)) {
             snd_pcm_uframes_t avail_min;
             if (!enif_get_ulong(env, fields[1], &avail_min)) {
                 return enif_make_badarg(env);
@@ -464,7 +470,7 @@ static ERL_NIF_TERM alsa_pcm_nif_set_swparams(ErlNifEnv* env, int argc, const ER
             if (ret < 0) {
                 return enif_make_tuple2(env, am_error, libasound_error_to_erl(env, ret));
             }
-        } else if (strcmp("start_threshold", name) == 0) {
+        } else if (enif_is_identical(name, am_start_threshold)) {
             snd_pcm_uframes_t start_threshold;
             if (!enif_get_ulong(env, fields[1], &start_threshold)) {
                 return enif_make_badarg(env);
@@ -474,13 +480,33 @@ static ERL_NIF_TERM alsa_pcm_nif_set_swparams(ErlNifEnv* env, int argc, const ER
             if (ret < 0) {
                 return enif_make_tuple2(env, am_error, libasound_error_to_erl(env, ret));
             }
-        } else if (strcmp("stop_threshold", name) == 0) {
+        } else if (enif_is_identical(name, am_stop_threshold)) {
             snd_pcm_uframes_t stop_threshold;
             if (!enif_get_ulong(env, fields[1], &stop_threshold)) {
                 return enif_make_badarg(env);
             }
 
             ret = snd_pcm_sw_params_set_stop_threshold(resource->handle, sw_params, stop_threshold);
+            if (ret < 0) {
+                return enif_make_tuple2(env, am_error, libasound_error_to_erl(env, ret));
+            }
+        } else if (enif_is_identical(name, am_silence_threshold)) {
+            snd_pcm_uframes_t silence_threshold;
+            if (!enif_get_ulong(env, fields[1], &silence_threshold)) {
+                return enif_make_badarg(env);
+            }
+
+            ret = snd_pcm_sw_params_set_silence_threshold(resource->handle, sw_params, silence_threshold);
+            if (ret < 0) {
+                return enif_make_tuple2(env, am_error, libasound_error_to_erl(env, ret));
+            }
+        } else if (enif_is_identical(name, am_silence_size)) {
+            snd_pcm_uframes_t silence_size;
+            if (!enif_get_ulong(env, fields[1], &silence_size)) {
+                return enif_make_badarg(env);
+            }
+
+            ret = snd_pcm_sw_params_set_silence_size(resource->handle, sw_params, silence_size);
             if (ret < 0) {
                 return enif_make_tuple2(env, am_error, libasound_error_to_erl(env, ret));
             }
@@ -495,6 +521,80 @@ static ERL_NIF_TERM alsa_pcm_nif_set_swparams(ErlNifEnv* env, int argc, const ER
     }
 
     return am_ok;
+}
+
+static ERL_NIF_TERM alsa_pcm_nif_get_swparams(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    alsa_pcm_nif_resource_t *resource;
+    if (!enif_get_resource(env, argv[0], alsa_pcm_nif_resource_type, (void**) &resource)) {
+        return enif_make_badarg(env);
+    }
+
+    snd_pcm_sw_params_t *sw_params;
+    snd_pcm_sw_params_alloca(&sw_params);
+    int ret = snd_pcm_sw_params_current(resource->handle, sw_params);
+    if (ret < 0) {
+        return enif_make_tuple2(env, am_error, libasound_error_to_erl(env, ret));
+    }
+
+    snd_pcm_uframes_t avail_min;
+    ret = snd_pcm_sw_params_get_avail_min(sw_params, &avail_min);
+    if (ret < 0) {
+        return enif_make_tuple2(env, am_error, libasound_error_to_erl(env, ret));
+    }
+
+    snd_pcm_uframes_t boundary;
+    ret = snd_pcm_sw_params_get_boundary(sw_params, &boundary);
+    if (ret < 0) {
+        return enif_make_tuple2(env, am_error, libasound_error_to_erl(env, ret));
+    }
+
+    snd_pcm_uframes_t start_threshold;
+    ret = snd_pcm_sw_params_get_start_threshold(sw_params, &start_threshold);
+    if (ret < 0) {
+        return enif_make_tuple2(env, am_error, libasound_error_to_erl(env, ret));
+    }
+
+    snd_pcm_uframes_t stop_threshold;
+    ret = snd_pcm_sw_params_get_stop_threshold(sw_params, &stop_threshold);
+    if (ret < 0) {
+        return enif_make_tuple2(env, am_error, libasound_error_to_erl(env, ret));
+    }
+
+    snd_pcm_uframes_t silence_threshold;
+    ret = snd_pcm_sw_params_get_silence_threshold(sw_params, &silence_threshold);
+    if (ret < 0) {
+        return enif_make_tuple2(env, am_error, libasound_error_to_erl(env, ret));
+    }
+
+    snd_pcm_uframes_t silence_size;
+    ret = snd_pcm_sw_params_get_silence_size(sw_params, &silence_size);
+    if (ret < 0) {
+        return enif_make_tuple2(env, am_error, libasound_error_to_erl(env, ret));
+    }
+
+    ERL_NIF_TERM keys[] = {
+        am_avail_min,
+        am_boundary,
+        am_start_threshold,
+        am_stop_threshold,
+        am_silence_threshold,
+        am_silence_size,
+    };
+    ERL_NIF_TERM values[] = {
+        enif_make_ulong(env, avail_min),
+        enif_make_ulong(env, boundary),
+        enif_make_ulong(env, start_threshold),
+        enif_make_ulong(env, stop_threshold),
+        enif_make_ulong(env, silence_threshold),
+        enif_make_ulong(env, silence_size),
+    };
+
+    ERL_NIF_TERM result;
+    static_assert(ARRAY_LENGTH(keys) == ARRAY_LENGTH(values), "key/value size mismatch");
+    enif_make_map_from_arrays(env, keys, values, ARRAY_LENGTH(keys), &result);
+
+    return enif_make_tuple2(env, am_ok, result);
 }
 
 static ERL_NIF_TERM alsa_pcm_nif_set_params(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
@@ -802,6 +902,13 @@ static int alsa_pcm_nif_on_load(ErlNifEnv *env, void** priv_data, ERL_NIF_TERM l
     am_rw_interleaved = enif_make_atom(env, "rw_interleaved");
     am_rw_noninterleaved = enif_make_atom(env, "rw_noninterleaved");
 
+    am_avail_min = enif_make_atom(env, "avail_min");
+    am_boundary = enif_make_atom(env, "boundary");
+    am_start_threshold = enif_make_atom(env, "start_threshold");
+    am_stop_threshold = enif_make_atom(env, "stop_threshold");
+    am_silence_threshold = enif_make_atom(env, "silence_threshold");
+    am_silence_size = enif_make_atom(env, "silence_size");
+
     // Resources
     alsa_pcm_nif_resource_type = enif_open_resource_type_x(env,
         "pcm",
@@ -839,6 +946,7 @@ static ErlNifFunc nif_funcs[] = {
     {"close_nif", 1, alsa_pcm_nif_close},
     {"set_hwparams_nif", 2, alsa_pcm_nif_set_hwparams},
     {"set_swparams_nif", 2, alsa_pcm_nif_set_swparams},
+    {"get_swparams_nif", 1, alsa_pcm_nif_get_swparams},
     {"set_params_nif", 7, alsa_pcm_nif_set_params},
     {"prepare_nif", 1, alsa_pcm_nif_prepare},
     {"drop_nif", 1, alsa_pcm_nif_drop},
