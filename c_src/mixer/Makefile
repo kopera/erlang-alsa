@@ -23,7 +23,7 @@ endif
 CFLAGS += -std=c99 -D_GNU_SOURCE -fPIC -I $(ERTS_INCLUDE_DIR) -I $(ERL_INTERFACE_INCLUDE_DIR)
 CFLAGS += $(shell pkg-config --cflags alsa)
 
-LDFLAGS += -L $(ERL_INTERFACE_LIB_DIR) -lerl_interface -lei
+LDFLAGS += -L $(ERL_INTERFACE_LIB_DIR) -lei
 LDFLAGS += $(shell $(PKG_CONFIG) --libs alsa)
 
 # Verbosity
