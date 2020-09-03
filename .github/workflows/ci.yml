@@ -9,6 +9,7 @@ on:
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
         platform: ['ubuntu-latest']
         otp-version: ['22.0', '22.1', '22.2', '22.3', '23.0']
@@ -41,4 +42,4 @@ jobs:
     - name: Run tests
       run: rebar3 do eunit
     - name: Run Checks
-      run: rebar3 do dialyzer, xref
+      run: rebar3 do xref, dialyzer

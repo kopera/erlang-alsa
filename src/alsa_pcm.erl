@@ -561,7 +561,7 @@ next_timeout(StartTimestamp, Timeout) ->
 %
 
 init() ->
-        ok = erlang:load_nif(nif_path(), 0).
+    ok = erlang:load_nif(nif_path(), 0).
 
 -spec nif_path() -> string() | binary() | undefined.
 nif_path() ->
