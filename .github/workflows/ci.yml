@@ -1,23 +1,44 @@
 name: CI
-
-on: [push]
-
+on:
+  push:
+    branches:
+      - '*'
+  pull_request:
+    branches:
+      - master
 jobs:
-
   build:
-
-    runs-on: ubuntu-latest
-
+    strategy:
+      matrix:
+        platform: ['ubuntu-latest']
+        otp-version: ['21.3', '22.3', '23.0']
+    runs-on: ${{ matrix.platform }}
     container:
-      image: erlang:22.0.7
-
+      image: erlang:${{ matrix.otp-version }}
     steps:
     - name: Update apt cache
       run: apt-get update
     - name: Install packages
-      run: apt-get install -y build-essential libasound2-dev 
-    - uses: actions/checkout@v1
+      run: apt-get install -y build-essential libasound2-dev
+    - name: Checkout
+      uses: actions/checkout@v2
+    - name: Cache Hex packages
+      uses: actions/cache@v1
+      with:
+        path: ~/.cache/rebar3/hex/hexpm/packages
+        key: ${{ runner.os }}-hex-${{ hashFiles(format('{0}{1}', github.workspace, '/rebar.lock')) }}
+        restore-keys: |
+          ${{ runner.os }}-hex-
+    - name: Cache Dialyzer PLT
+      uses: actions/cache@v1
+      with:
+        path: ~/.cache/rebar3/rebar3_*.plt
+        key: ${{ runner.os }}-dialyzer-${{ hashFiles(format('{0}{1}', github.workspace, '/rebar.config')) }}
+        restore-keys: |
+          ${{ runner.os }}-dialyzer-
     - name: Compile
       run: rebar3 compile
     - name: Run tests
       run: rebar3 do eunit
+    - name: Run Checks
+      run: rebar3 do dialyzer, xref
