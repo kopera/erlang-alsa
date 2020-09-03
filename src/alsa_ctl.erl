@@ -118,12 +118,7 @@ elem_write_nif(_CTL, _Id, _Value) ->
 %
 
 init() ->
-    case nif_path() of
-        undefined ->
-            ok;
-        Path ->
-            ok = erlang:load_nif(Path, 0)
-    end.
+    ok = erlang:load_nif(nif_path(), 0).
 
 -spec nif_path() -> string() | binary() | undefined.
 nif_path() ->
