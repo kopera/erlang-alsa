@@ -146,10 +146,10 @@ set_hwparams_nif(_PCM, _Params) ->
 -spec set_swparams(pcm(), swparams_options()) -> ok | {error, error()}.
 -type swparams_options() :: #{
     avail_min => pos_integer(),
-    start_threshold => pos_integer(),
-    stop_threshold => pos_integer(),
-    silence_threshold => pos_integer(),
-    silence_size => pos_integer()
+    start_threshold => non_neg_integer(),
+    stop_threshold => non_neg_integer(),
+    silence_threshold => non_neg_integer(),
+    silence_size => non_neg_integer()
 }.
 set_swparams(PCM, Params) ->
     set_swparams_nif(PCM, maps:to_list(Params)).
@@ -163,10 +163,10 @@ set_swparams_nif(_PCM, _Params) ->
 -type swparams() :: #{
     avail_min := pos_integer(),
     boundary := pos_integer(),
-    start_threshold := pos_integer(),
-    stop_threshold := pos_integer(),
-    silence_threshold := pos_integer(),
-    silence_size := pos_integer()
+    start_threshold := non_neg_integer(),
+    stop_threshold := non_neg_integer(),
+    silence_threshold := non_neg_integer(),
+    silence_size := non_neg_integer()
 }.
 get_swparams(PCM) ->
     get_swparams_nif(PCM).
