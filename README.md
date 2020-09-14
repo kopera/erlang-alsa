@@ -12,7 +12,7 @@ you can add the following to your `rebar.config`:
 
 ```erlang
 {deps, [
-    {alsa, "0.2.1"}
+    {alsa, "0.2.2"}
 ]}.
 ```
 
