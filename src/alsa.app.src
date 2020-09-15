@@ -15,5 +15,10 @@
     {licenses, ["Apache 2.0"]},
     {links, [
         {"GitHub", "https://github.com/kopera/erlang-alsa"}
+    ]},
+    {exclude_files, [
+        "c_src/mixer/_build/",
+        "c_src/mixer/env.mk",
+        "c_src/nif/env.mk"
     ]}
  ]}.
