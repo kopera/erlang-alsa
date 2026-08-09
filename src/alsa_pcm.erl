@@ -297,7 +297,7 @@ pause_nif(_PCM, _Pause) ->
 %% @returns ok on success otherwise a posix error.
 -spec recover(pcm(), error()) -> ok | {error, error()}.
 -type error() ::
-      eagain | ebadfd | eintr | enoent | enosys | epipe | estrpipe
+      eagain | ebadfd | ebusy | eintr | enoent | enosys | epipe | estrpipe
     | pos_integer().
 recover(PCM, Error) ->
     recover_nif(PCM, Error, true).

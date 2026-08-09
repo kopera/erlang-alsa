@@ -39,6 +39,7 @@ static ERL_NIF_TERM am_false;
 
 static ERL_NIF_TERM am_closed;
 
+static ERL_NIF_TERM am_ebusy;
 static ERL_NIF_TERM am_enoent;
 static ERL_NIF_TERM am_enomem;
 static ERL_NIF_TERM am_enotsup;
@@ -75,6 +76,7 @@ static ERL_NIF_TERM am_subdevice;
 static ERL_NIF_TERM libasound_error_to_erl(ErlNifEnv *env, int error)
 {
     switch (-error) {
+        case EBUSY: return am_ebusy;
         case ENOENT: return am_enoent;
         case ENOMEM: return am_enomem;
         default: return enif_make_int(env, -error);
@@ -793,6 +795,7 @@ static int alsa_ctl_nif_on_load(ErlNifEnv *env, void** priv_data, ERL_NIF_TERM l
 
     am_closed = enif_make_atom(env, "closed");
 
+    am_ebusy = enif_make_atom(env, "ebusy");
     am_enoent = enif_make_atom(env, "enoent");
     am_enomem = enif_make_atom(env, "enomem");
     am_enotsup = enif_make_atom(env, "enotsup");
