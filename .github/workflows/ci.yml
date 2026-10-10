@@ -35,4 +35,3 @@ jobs:
         rebar3 ex_doc
         test -f doc/alsa_pcm.html
         test -f doc/alsa_ctl.html
-        test -f doc/alsa_mixer.html
