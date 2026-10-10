@@ -11,7 +11,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        otp-version: ['26.2', '27.3', '28.5', '29.1']
+        otp-version: ['27.3', '28.5', '29.1']
     runs-on: ubuntu-latest
     steps:
     - name: Install packages

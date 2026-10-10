@@ -92,7 +92,7 @@ set_playback_switch_all(Mixer, ControlId, State) when State =:= on; State =:= of
     gen_server:call(?server(Mixer), {set_playback_switch_all, {ControlId, State}}).
 
 
-%% @private
+-doc false.
 -spec start_link(term(), pid(), string()) -> {ok, pid()} | {error, term()}.
 start_link(Ref, Owner, Device) ->
     gen_server:start_link(?server(Ref), ?MODULE, {Ref, Owner, Device}, []).
@@ -102,7 +102,7 @@ start_link(Ref, Owner, Device) ->
 %% gen_server callbacks
 %%====================================================================
 
-%% @hidden
+-doc false.
 init({Ref, Owner, Device}) ->
     Port = alsa_mixer_port:open([Device]),
     init_(#state{
@@ -127,7 +127,7 @@ init_(#state{port = Port} = State) ->
     end.
 
 
-%% @hidden
+-doc false.
 handle_call(get_controls, _From, State) ->
     #state{controls = Controls} = State,
     {reply, {ok, [Id || {Id, _} <- Controls]}, State};
@@ -144,12 +144,12 @@ handle_call(_Request, _From, State) ->
     {reply, {error, not_implemented}, State}.
 
 
-%% @hidden
+-doc false.
 handle_cast(_Request, State) ->
     {noreply, State}.
 
 
-%% @hidden
+-doc false.
 handle_info({Port, {data, Data}}, #state{port = Port} = State) ->
     #state{ref = Ref, owner_pid = OwnerPid, controls = Controls} = State,
     case erlang:binary_to_term(Data) of

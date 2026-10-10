@@ -1,5 +1,5 @@
-%% @private
 -module(alsa_app).
+-moduledoc false.
 
 -behaviour(application).
 -export([

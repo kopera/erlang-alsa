@@ -1,5 +1,5 @@
-%% @private
 -module(alsa_mixer_port).
+-moduledoc false.
 -export([
     open/1,
     close/1,
