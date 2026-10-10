@@ -1,6 +1,6 @@
 {application, alsa, [
     {description, "Alsa libasound2 bindings"},
-    {vsn, "0.3.0"},
+    {vsn, "git"},
     {registered, [alsa_sup, alsa_mixer_sup]},
     {mod, {alsa_app, []}},
     {applications, [
