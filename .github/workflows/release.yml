@@ -116,12 +116,13 @@ jobs:
           HEX_API_KEY: ${{ secrets.HEX_API_KEY }}
         run: rebar3 hex publish --repo hexpm --yes
 
-      - name: Add the Hex link to the release
+      - name: Add the Hex links to the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           notes="$(gh release view "v$VERSION" --json body --jq .body)"
           gh release edit "v$VERSION" --notes "- Hex: https://hex.pm/packages/alsa/$VERSION
+          - HexDocs: https://alsa.hexdocs.pm/$VERSION
 
           $notes"
 

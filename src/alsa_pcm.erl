@@ -120,10 +120,10 @@ set_hwparams_nif(_PCM, _Params) ->
 %%
 %%     <dt>start_threshold</dt>
 %%     <dd>PCM is automatically started when playback frames available to PCM
-%%     are >= `start_threshold` or when requested capture frames are >= `start_threshold`.</dd>
+%%     are >= `start_threshold' or when requested capture frames are >= `start_threshold'.</dd>
 %%
 %%     <dt>stop_threshold</dt>
-%%     <dd>PCM is automatically stopped an underrun/overrun state when available frames is >= `stop_threshold`.
+%%     <dd>PCM is automatically stopped an underrun/overrun state when available frames is >= `stop_threshold'.
 %%     If the stop threshold is equal to boundary then automatic stop will be disabled (thus device will do
 %%     the endless loop in the ring buffer).</dd>
 %%

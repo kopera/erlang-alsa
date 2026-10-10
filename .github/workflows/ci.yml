@@ -30,3 +30,9 @@ jobs:
       run: rebar3 eunit
     - name: Run xref
       run: rebar3 xref
+    - name: Build the docs
+      run: |
+        rebar3 ex_doc
+        test -f doc/alsa_pcm.html
+        test -f doc/alsa_ctl.html
+        test -f doc/alsa_mixer.html
