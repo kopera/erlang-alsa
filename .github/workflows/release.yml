@@ -1,23 +1,126 @@
-name: Prepare Release
+name: Release
 
 on:
-  push:
-    tags:
-      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to release, without the leading v (for example 0.2.0)
+        required: true
+        type: string
+      author-name:
+        description: Name of the author of the release commits
+        required: true
+        type: string
+      author-email:
+        description: Email of the author of the release commits
+        required: true
+        type: string
+
+concurrency: release
+
+permissions:
+  contents: write
 
 jobs:
-  build:
-    name: Create Release
+  release:
+    if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
+
+    env:
+      VERSION: ${{ inputs.version }}
+      AUTHOR_NAME: ${{ inputs.author-name }}
+      AUTHOR_EMAIL: ${{ inputs.author-email }}
+
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Validate the inputs
+        run: |
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::'$VERSION' is not a valid version"
+            exit 1
+          fi
+          if [[ ! "$AUTHOR_EMAIL" =~ ^[^[:space:]@]+@[^[:space:]@]+$ ]]; then
+            echo "::error::'$AUTHOR_EMAIL' is not a valid email"
+            exit 1
+          fi
+
+      - name: Check out
+        uses: actions/checkout@v7
+
+      - name: Check that the release does not exist
+        run: |
+          if git ls-remote --exit-code --tags origin "refs/tags/v$VERSION" > /dev/null; then
+            echo "::error::The tag v$VERSION already exists"
+            exit 1
+          fi
+
+      - uses: erlef/setup-beam@v1
         with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
-          draft: true
+          otp-version: "27.3"
+          rebar3-version: "3.27.1"
+
+      - name: Install packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes libasound2-dev
+
+      - name: Setup rebar3 hex
+        run: |
+          mkdir -p ~/.config/rebar3/
+          echo "{plugins, [rebar3_hex]}." >> ~/.config/rebar3/rebar.config
+
+      - name: Set the version in the manifest
+        run: |
+          sed -i "s/{vsn, \"git\"}/{vsn, \"$VERSION\"}/" src/alsa.app.src
+          grep -q "{vsn, \"$VERSION\"}" src/alsa.app.src
+
+      - name: Run unit tests
+        run: rebar3 eunit
+
+      - name: Run xref
+        run: rebar3 xref
+
+      - name: Commit the release
+        id: commit
+        run: |
+          git config user.name "$AUTHOR_NAME"
+          git config user.email "$AUTHOR_EMAIL"
+          git commit --all --message "Release $VERSION"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Check the Hex package
+        env:
+          HEX_API_KEY: ${{ secrets.HEX_API_KEY }}
+        run: rebar3 hex publish --repo hexpm --dry-run --yes
+
+      - name: Push the release commit
+        run: git push origin HEAD:master
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "v$VERSION" \
+            --target "${{ steps.commit.outputs.sha }}" \
+            --title "v$VERSION" \
+            --generate-notes
+
+      - name: Publish to Hex.pm
+        env:
+          HEX_API_KEY: ${{ secrets.HEX_API_KEY }}
+        run: rebar3 hex publish --repo hexpm --yes
+
+      - name: Add the Hex links to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          notes="$(gh release view "v$VERSION" --json body --jq .body)"
+          gh release edit "v$VERSION" --notes "- Hex: https://hex.pm/packages/alsa/$VERSION
+          - HexDocs: https://alsa.hexdocs.pm/$VERSION
+
+          $notes"
+
+      - name: Post release version bump
+        run: |
+          sed -i "s/{vsn, \"$VERSION\"}/{vsn, \"git\"}/" src/alsa.app.src
+          git commit --all --message "Post release version bump"
+          git push origin HEAD:master

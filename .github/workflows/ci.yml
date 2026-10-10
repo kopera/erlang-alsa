@@ -22,16 +22,16 @@ jobs:
     - name: Install packages
       run: apt-get install -y build-essential libasound2-dev
     - name: Checkout
-      uses: actions/checkout@v2
+      uses: actions/checkout@v7
     - name: Cache Hex packages
-      uses: actions/cache@v1
+      uses: actions/cache@v6
       with:
         path: ~/.cache/rebar3/hex/hexpm/packages
         key: ${{ runner.os }}-hex-${{ hashFiles(format('{0}{1}', github.workspace, '/rebar.lock')) }}
         restore-keys: |
           ${{ runner.os }}-hex-
     - name: Cache Dialyzer PLT
-      uses: actions/cache@v1
+      uses: actions/cache@v6
       with:
         path: ~/.cache/rebar3/rebar3_*.plt
         key: ${{ runner.os }}-dialyzer-${{ hashFiles(format('{0}{1}', github.workspace, '/rebar.config')) }}
