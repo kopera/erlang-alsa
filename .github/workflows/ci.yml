@@ -11,7 +11,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        otp-version: ['26.2', '27.3', '28.5', '29.1']
+        otp-version: ['27.3', '28.5', '29.1']
     runs-on: ubuntu-latest
     steps:
     - name: Install packages
@@ -30,3 +30,8 @@ jobs:
       run: rebar3 eunit
     - name: Run xref
       run: rebar3 xref
+    - name: Build the docs
+      run: |
+        rebar3 ex_doc
+        test -f doc/alsa_pcm.html
+        test -f doc/alsa_ctl.html

@@ -1,5 +1,5 @@
-%% @private
 -module(alsa_sup).
+-moduledoc false.
 -export([
     start_link/0
 ]).

@@ -84,13 +84,20 @@ jobs:
         run: |
           git config user.name "$AUTHOR_NAME"
           git config user.email "$AUTHOR_EMAIL"
-          git commit --all --message "Release $VERSION"
+          git commit --message "Release $VERSION" src/alsa.app.src
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Check the Hex package
         env:
           HEX_API_KEY: ${{ secrets.HEX_API_KEY }}
-        run: rebar3 hex publish --repo hexpm --dry-run --yes
+        run: |
+          set -o pipefail
+          rebar3 hex publish --repo hexpm --dry-run --yes 2>&1 | tee hex-dry-run.log
+          if grep -q "invalid license" hex-dry-run.log; then
+            echo "::error::Hex would reject the license"
+            exit 1
+          fi
+          rm hex-dry-run.log
 
       - name: Push the release commit
         run: git push origin HEAD:master
@@ -122,5 +129,5 @@ jobs:
       - name: Post release version bump
         run: |
           sed -i "s/{vsn, \"$VERSION\"}/{vsn, \"git\"}/" src/alsa.app.src
-          git commit --all --message "Post release version bump"
+          git commit --message "Post release version bump" src/alsa.app.src
           git push origin HEAD:master

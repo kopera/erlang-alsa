@@ -1,6 +1,7 @@
 /.rebar3
 /_build
 /_checkouts
+/doc
 /ebin
 /priv/alsa_ctl_nif.so
 /priv/alsa_pcm_nif.so

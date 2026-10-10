@@ -1,5 +1,5 @@
-%% @private
 -module(alsa_mixer_sup).
+-moduledoc false.
 -export([
     start_mixer/3
 ]).

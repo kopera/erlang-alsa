@@ -1,4 +1,37 @@
 -module(alsa_pcm).
+-moduledoc """
+Capture and playback of audio through an ALSA PCM device.
+
+Open a device with `open/2`, configure it with `set_params/2` (or with
+`set_hwparams/2` and `set_swparams/2` for finer control), then play audio with
+`writei/3` or capture it with `readi/2`, and close the device with `close/1`.
+The PCM handle is closed automatically if the process that opened it
+terminates.
+
+The functions return `{error, Error}` with a posix error `Error`, see
+`t:error/0`. `recover/2` recovers a stream from the errors that can be
+recovered from, such as an underrun or an overrun.
+
+## Example
+
+Playing audio:
+
+```erlang
+{ok, PCM} = alsa_pcm:open("default", playback),
+ok = alsa_pcm:set_params(PCM, #{
+    format => s16_le,
+    access => rw_interleaved,
+    channels => 2,
+    rate => 48000,
+    rate_resample => true,
+    latency => 100000
+}),
+ok = alsa_pcm:writei(PCM, Data, infinity),
+ok = alsa_pcm:close(PCM).
+```
+
+See the `examples` directory for more.
+""".
 -export([
     open/2,
     close/1,
@@ -23,54 +56,46 @@
 ]).
 -export_type([
     pcm/0,
-    error/0
+    error/0,
+    hwparams/0,
+    hwparam_access/0,
+    hwparam_format/0,
+    params/0,
+    swparams_options/0,
+    swparams/0
 ]).
 
 -on_load(init/0).
 
 
-%% @doc Opens a PCM. The returned PCM handle will be closed automatically if the
-%% opening process terminates.
-%%
-%% @param Device    ASCII identifier of the PCM handle
-%% @param Direction wanted stream direction, that is either `capture' for
-%%                  reading audio data from the audio device, or `playback' for
-%%                  writing audio data to the audio device.
-%% @returns a handle to the PCM device on success otherwise a posix error.
--spec open(string() | binary(), playback | capture) -> {ok, pcm()} | {error, error()}.
+%%====================================================================
+%% Types
+%%====================================================================
+
+-doc "A handle to a PCM.".
 -opaque pcm() :: reference().
-open(Device, Direction) ->
-    open_nif(unicode:characters_to_list(Device, latin1), case Direction of
-        playback -> 0;
-        capture -> 1
-    end).
 
-%% nif
-open_nif(_Device, _Direction) ->
-    erlang:nif_error(not_loaded).
+-doc """
+A posix error. The most common ones are atoms, the others are error numbers.
+""".
+-type error() ::
+      eagain | ebadfd | ebusy | eintr | enoent | enosys | epipe | estrpipe
+    | pos_integer().
 
-
-%% @doc Closes a previously opened PCM handle.
-%% @param PCM       the PCM handle to close
-%% @returns ok on success otherwise a posix error.
--spec close(pcm()) -> ok | {error, error()}.
-close(PCM) ->
-    close_nif(PCM).
-
-%% nif
-close_nif(_PCM) ->
-    erlang:nif_error(not_loaded).
-
-
--spec set_hwparams(pcm(), hwparams()) -> ok | {error, error()}.
--type hwparams() :: #{
-    access => hwparam_access(),
-    format => hwparam_format(),
-    channels => pos_integer(),
-    rate => pos_integer(),
-    rate_resample => boolean()
-}.
+-doc """
+The access mode of the PCM: `rw_interleaved` when the channels data is
+multiplexed into the same buffer, or `rw_noninterleaved` when each channel has
+a separate buffer.
+""".
 -type hwparam_access() :: rw_interleaved | rw_noninterleaved.
+
+-doc """
+The sample format. The names are those of the ALSA sample formats, such as
+`s16_le` for signed 16 bit little endian samples and `float_be` for 32 bit
+float big endian samples. The names without an endianness (`s16`, `u16`, `s24`,
+`u24`, `s32`, `u32`, `float`, `float64`, `iec958_subframe`, `s20` and `u20`)
+are aliases for the endianness of the machine.
+""".
 -type hwparam_format() ::
       s8 | u8
     | s16_le | s16_be | u16_le | u16_be
@@ -102,114 +127,26 @@ close_nif(_PCM) ->
     | float64
     | iec958_subframe
     | s20 | u20.
-set_hwparams(PCM, Params) ->
-    set_hwparams_nif(PCM, maps:to_list(Params)).
 
-%% nif
-set_hwparams_nif(_PCM, _Params) ->
-    erlang:nif_error(not_loaded).
+-doc """
+The hardware parameters of a PCM, see `set_hwparams/2`.
 
-
-%% @doc Set the software parameters
-%%
-%% <dl>
-%%     <dt>avail_min</dt>
-%%     <dd>Set avail min inside a software configuration container. The valid
-%%      values are determined by the specific hardware. Most PC sound cards
-%%      can only accept power of 2 frame counts (i.e. 512, 1024, 2048).</dd>
-%%
-%%     <dt>start_threshold</dt>
-%%     <dd>PCM is automatically started when playback frames available to PCM
-%%     are >= `start_threshold` or when requested capture frames are >= `start_threshold`.</dd>
-%%
-%%     <dt>stop_threshold</dt>
-%%     <dd>PCM is automatically stopped an underrun/overrun state when available frames is >= `stop_threshold`.
-%%     If the stop threshold is equal to boundary then automatic stop will be disabled (thus device will do
-%%     the endless loop in the ring buffer).</dd>
-%%
-%%     <dt>silence_threshold</dt>
-%%     <dd>A portion of playback buffer is overwritten with silence when playback underrun is
-%%     nearer than silence threshold.</dd>
-%%
-%%     <dt>silence_size</dt>
-%%     <dd>A portion of playback buffer is overwritten with silence when playback underrun is nearer
-%%     than silence threshold (see snd_pcm_sw_params_set_silence_threshold) The special case is when
-%%     silence size value is equal or greater than boundary. The unused portion of the ring buffer
-%%     (initial written samples are untouched) is filled with silence at start. Later, only just
-%%     processed sample area is filled with silence. Note: silence_threshold must be set to zero.</dd>
-%%
-%% </dl>
-%%
-%% @param PCM       the PCM handle
-%% @param Params    a map of the parameters to set.
-%% @returns ok on success otherwise a posix error.
--spec set_swparams(pcm(), swparams_options()) -> ok | {error, error()}.
--type swparams_options() :: #{
-    avail_min => pos_integer(),
-    start_threshold => non_neg_integer(),
-    stop_threshold => non_neg_integer(),
-    silence_threshold => non_neg_integer(),
-    silence_size => non_neg_integer()
+  * `access` - the access mode
+  * `format` - the sample format
+  * `channels` - the number of channels
+  * `rate` - the sample rate, such as 44100 or 48000
+  * `rate_resample` - whether to allow software resampling in case the
+    provided sample rate is not supported by the device
+""".
+-type hwparams() :: #{
+    access => hwparam_access(),
+    format => hwparam_format(),
+    channels => pos_integer(),
+    rate => pos_integer(),
+    rate_resample => boolean()
 }.
-set_swparams(PCM, Params) ->
-    set_swparams_nif(PCM, maps:to_list(Params)).
 
-%% nif
-set_swparams_nif(_PCM, _Params) ->
-    erlang:nif_error(not_loaded).
-
-
--spec get_swparams(pcm()) -> {ok, swparams()} | {error, error()}.
--type swparams() :: #{
-    avail_min := pos_integer(),
-    boundary := pos_integer(),
-    start_threshold := non_neg_integer(),
-    stop_threshold := non_neg_integer(),
-    silence_threshold := non_neg_integer(),
-    silence_size := non_neg_integer()
-}.
-get_swparams(PCM) ->
-    get_swparams_nif(PCM).
-
-%% nif
-get_swparams_nif(_PCM) ->
-    erlang:nif_error(not_loaded).
-
-
-%% @doc Set the hardware and software parameters in a simple way. The following
-%%      parameters are all required:
-%%
-%% <dl>
-%%     <dt>access</dt>
-%%     <dd>The required {@link hwparam_access(). access} mode, that is either
-%%     rw_interleaved or rw_noninterleaved. Interleaved access means that the
-%%     channels data is multiplexed into the same buffer, and that {@link readi/2}
-%%     and {@link writei/3} are to be used. Non interleaves means that the channels
-%%     data is read/written to separate buffers, in which case {@link readn/2} and
-%%     {@link writen/3} are to be used.</dd>
-%%
-%%     <dt>format</dt>
-%%     <dd>The {@link hwparam_format(). sample format}. The format specifies how
-%%     the data in each sample is encoded.</dd>
-%%
-%%     <dt>channels</dt>
-%%     <dd>The number of channels. Must be a stictly positive integer.</dd>
-%%
-%%     <dt>rate</dt>
-%%     <dd>The sample rate, such as 44100 or 48000.</dd>
-%%
-%%     <dt>rate_resample</dt>
-%%     <dd>Whether to allow software resampling in case the provided sample rate
-%%     is not supported by the target device.</dd>
-%%
-%%     <dt>latency</dt>
-%%     <dd>Required overall latency in μs.</dd>
-%% </dl>
-%%
-%% @param PCM       the PCM handle
-%% @param Params    a map of the parameters to set.
-%% @returns ok on success otherwise a posix error.
--spec set_params(pcm(), params()) -> ok | {error, error()}.
+-doc "The parameters for `set_params/2`, which are all required.".
 -type params() :: #{
     access := hwparam_access(),
     format := hwparam_format(),
@@ -218,6 +155,171 @@ get_swparams_nif(_PCM) ->
     rate_resample := boolean(),
     latency := pos_integer()
 }.
+
+-doc "The software parameters to set, see `set_swparams/2`.".
+-type swparams_options() :: #{
+    avail_min => pos_integer(),
+    start_threshold => non_neg_integer(),
+    stop_threshold => non_neg_integer(),
+    silence_threshold => non_neg_integer(),
+    silence_size => non_neg_integer()
+}.
+
+-doc "The current software parameters, see `get_swparams/1`.".
+-type swparams() :: #{
+    avail_min := pos_integer(),
+    boundary := pos_integer(),
+    start_threshold := non_neg_integer(),
+    stop_threshold := non_neg_integer(),
+    silence_threshold := non_neg_integer(),
+    silence_size := non_neg_integer()
+}.
+
+
+-doc """
+Opens a PCM. The returned PCM handle will be closed automatically if the
+opening process terminates.
+
+  * `Device` - ASCII identifier of the PCM handle
+  * `Direction` - wanted stream direction, that is either `capture` for
+    reading audio data from the audio device, or `playback` for writing audio
+    data to the audio device
+
+Returns a handle to the PCM device on success otherwise a posix error.
+""".
+-spec open(string() | binary(), playback | capture) -> {ok, pcm()} | {error, error()}.
+open(Device, Direction) ->
+    open_nif(unicode:characters_to_list(Device, latin1), case Direction of
+        playback -> 0;
+        capture -> 1
+    end).
+
+%% nif
+open_nif(_Device, _Direction) ->
+    erlang:nif_error(not_loaded).
+
+
+-doc """
+Closes a previously opened PCM handle.
+
+  * `PCM` - the PCM handle to close
+
+Returns `ok` on success otherwise a posix error.
+""".
+-spec close(pcm()) -> ok | {error, error()}.
+close(PCM) ->
+    close_nif(PCM).
+
+%% nif
+close_nif(_PCM) ->
+    erlang:nif_error(not_loaded).
+
+
+-doc """
+Sets the hardware parameters. The parameters that are not given are left for
+the device to choose.
+
+  * `PCM` - the PCM handle
+  * `Params` - a map of the parameters to set, see `t:hwparams/0`
+
+Returns `ok` on success otherwise a posix error. See `set_params/2` to set the
+hardware and software parameters in a simple way.
+""".
+-spec set_hwparams(pcm(), hwparams()) -> ok | {error, error()}.
+set_hwparams(PCM, Params) ->
+    set_hwparams_nif(PCM, maps:to_list(Params)).
+
+%% nif
+set_hwparams_nif(_PCM, _Params) ->
+    erlang:nif_error(not_loaded).
+
+
+-doc """
+Sets the software parameters.
+
+  * `avail_min` - the minimum number of frames that must be available before
+    the PCM wakes up. The valid values are determined by the specific
+    hardware. Most PC sound cards can only accept power of 2 frame counts
+    (i.e. 512, 1024, 2048).
+  * `start_threshold` - the PCM is automatically started when the playback
+    frames available to the PCM are greater than or equal to
+    `start_threshold`, or when the requested capture frames are greater than
+    or equal to `start_threshold`.
+  * `stop_threshold` - the PCM is automatically stopped in an underrun or
+    overrun state when the available frames are greater than or equal to
+    `stop_threshold`. If the stop threshold is equal to the boundary then the
+    automatic stop is disabled (thus the device will do the endless loop in
+    the ring buffer).
+  * `silence_threshold` - a portion of the playback buffer is overwritten
+    with silence when the playback underrun is nearer than the silence
+    threshold.
+  * `silence_size` - a portion of the playback buffer is overwritten with
+    silence when the playback underrun is nearer than the silence threshold
+    (see `snd_pcm_sw_params_set_silence_threshold`). The special case is when
+    the silence size is equal to or greater than the boundary. The unused
+    portion of the ring buffer (initial written samples are untouched) is
+    filled with silence at start. Later, only the just processed sample area
+    is filled with silence. Note: `silence_threshold` must be set to zero.
+
+Arguments:
+
+  * `PCM` - the PCM handle
+  * `Params` - a map of the parameters to set, see `t:swparams_options/0`
+
+Returns `ok` on success otherwise a posix error.
+""".
+-spec set_swparams(pcm(), swparams_options()) -> ok | {error, error()}.
+set_swparams(PCM, Params) ->
+    set_swparams_nif(PCM, maps:to_list(Params)).
+
+%% nif
+set_swparams_nif(_PCM, _Params) ->
+    erlang:nif_error(not_loaded).
+
+
+-doc """
+Gets the current software parameters.
+
+  * `PCM` - the PCM handle
+
+Returns the parameters, see `t:swparams/0`, on success otherwise a posix
+error. The `boundary` is the position at which the PCM position wraps around.
+""".
+-spec get_swparams(pcm()) -> {ok, swparams()} | {error, error()}.
+get_swparams(PCM) ->
+    get_swparams_nif(PCM).
+
+%% nif
+get_swparams_nif(_PCM) ->
+    erlang:nif_error(not_loaded).
+
+
+-doc """
+Sets the hardware and software parameters in a simple way. The following
+parameters are all required:
+
+  * `access` - the access mode, see `t:hwparam_access/0`. Interleaved access
+    means that the channels data is multiplexed into the same buffer, and that
+    `readi/2` and `writei/3` are to be used. Non interleaved access means that
+    the channels data is read or written to separate buffers, this library
+    does not provide functions for it.
+  * `format` - the sample format, see `t:hwparam_format/0`. The format
+    specifies how the data in each sample is encoded.
+  * `channels` - the number of channels, which must be a strictly positive
+    integer.
+  * `rate` - the sample rate, such as 44100 or 48000.
+  * `rate_resample` - whether to allow software resampling in case the
+    provided sample rate is not supported by the target device.
+  * `latency` - the required overall latency in microseconds.
+
+Arguments:
+
+  * `PCM` - the PCM handle
+  * `Params` - a map of the parameters to set, see `t:params/0`
+
+Returns `ok` on success otherwise a posix error.
+""".
+-spec set_params(pcm(), params()) -> ok | {error, error()}.
 set_params(PCM, Params) ->
     #{
         format := Format,
@@ -234,9 +336,13 @@ set_params_nif(_PCM, _Format, _Access, _Channels, _Rate, _Resample, _Latency) ->
     erlang:nif_error(not_loaded).
 
 
-%% @doc Prepare PCM for use.
-%% @param PCM       the PCM handle to prepare
-%% @returns ok on success otherwise a posix error.
+-doc """
+Prepares the PCM for use.
+
+  * `PCM` - the PCM handle to prepare
+
+Returns `ok` on success otherwise a posix error.
+""".
 -spec prepare(pcm()) -> ok | {error, error()}.
 prepare(PCM) ->
     prepare_nif(PCM).
@@ -246,11 +352,14 @@ prepare_nif(_PCM) ->
     erlang:nif_error(not_loaded).
 
 
-%% @doc Stop a PCM dropping pending frames. This function stops the PCM
-%%      immediately. The pending samples on the buffer are ignored.
-%%
-%% @param PCM       the PCM handle
-%% @returns ok on success otherwise a posix error.
+-doc """
+Stops the PCM, dropping the pending frames. The PCM is stopped immediately and
+the pending samples on the buffer are ignored.
+
+  * `PCM` - the PCM handle
+
+Returns `ok` on success otherwise a posix error.
+""".
 -spec drop(pcm()) -> ok | {error, error()}.
 drop(PCM) ->
     drop_nif(PCM).
@@ -260,20 +369,26 @@ drop_nif(_PCM) ->
     erlang:nif_error(not_loaded).
 
 
-%% @doc Pause the PCM. Note that this function works only on the hardware which
-%%      supports pause feature.
-%%
-%% @param PCM       the PCM handle
-%% @returns ok on success otherwise a posix error.
+-doc """
+Pauses the PCM. Note that this function works only on the hardware which
+supports the pause feature.
+
+  * `PCM` - the PCM handle
+
+Returns `ok` on success otherwise a posix error. See `unpause/1`.
+""".
 -spec pause(pcm()) -> ok | {error, error()}.
 pause(PCM) ->
     pause_nif(PCM, true).
 
 
-%% @doc Unpause a previously paused PCM.
-%% @see pause/1
-%% @param PCM       the PCM handle
-%% @returns ok on success otherwise a posix error.
+-doc """
+Unpauses a previously paused PCM.
+
+  * `PCM` - the PCM handle
+
+Returns `ok` on success otherwise a posix error. See `pause/1`.
+""".
 -spec unpause(pcm()) -> ok | {error, error()}.
 unpause(PCM) ->
     pause_nif(PCM, false).
@@ -283,22 +398,22 @@ pause_nif(_PCM, _Pause) ->
     erlang:nif_error(not_loaded).
 
 
-%% @doc Recover the stream state from an error or suspend. This functions
-%%      handles eintr (interrupted system call), epipe (overrun or underrun) and
-%%      estrpipe (stream is suspended) error codes trying to prepare given
-%%      stream for next I/O.
-%%
-%%      Note that this function returs the original error code when it is not
-%%      handled inside this function.
-%%
-%% @param PCM       the PCM handle
-%% @param Error     the previously returned error from which we are trying to
-%%                  recover.
-%% @returns ok on success otherwise a posix error.
+-doc """
+Recovers the stream state from an error or a suspend. This function handles
+the `eintr` (interrupted system call), `epipe` (overrun or underrun) and
+`estrpipe` (stream is suspended) errors, trying to prepare the given stream for
+the next I/O.
+
+Note that this function returns the original error when it is not handled
+inside this function.
+
+  * `PCM` - the PCM handle
+  * `Error` - the previously returned error from which we are trying to
+    recover
+
+Returns `ok` on success otherwise a posix error.
+""".
 -spec recover(pcm(), error()) -> ok | {error, error()}.
--type error() ::
-      eagain | ebadfd | ebusy | eintr | enoent | enosys | epipe | estrpipe
-    | pos_integer().
 recover(PCM, Error) ->
     recover_nif(PCM, Error, true).
 
@@ -307,13 +422,10 @@ recover_nif(_PCM, _Error, _Silent) ->
     erlang:nif_error(not_loaded).
 
 
-%% @hidden
-%% @doc Reset the PCM position. This function resets the buffer and thus delay
+%% Reset the PCM position. This function resets the buffer and thus delay
 %%      to 0 while keeping the playback running. This will most propably result
 %%      in an underrun.
-%%
-%% @param PCM       the PCM handle
-%% @returns ok on success otherwise a posix error.
+-doc false.
 -spec reset(pcm()) -> ok | {error, error()}.
 reset(PCM) ->
     reset_nif(PCM).
@@ -323,19 +435,16 @@ reset_nif(_PCM) ->
     erlang:nif_error(not_loaded).
 
 
-%% @hidden
-%% @doc Resume from suspend, no samples are lost. This function can be used when
+%% Resume from suspend, no samples are lost. This function can be used when
 %%      the stream is in the suspend state to do the fine resume from this
 %%      state. Not all hardware supports this feature, when an enosys error is
 %%      returned, use the @{link prepare/1} function to recover.
 %%
-%% @param PCM       the PCM handle
-%% @param Timeout   a timeout or `nowait'
-%% @returns ok on success otherwise a posix error. If `nowait' is specified
 %%          as timeout, this function will return `{wait, {ready_resume, Reference}}',
 %%          at which point, the caller should wait for the `{ready_resume, Reference}'
 %%          message to be delivered to its message box before calling this
 %%          function again.
+-doc false.
 -spec resume(pcm(), timeout() | nowait) ->
       ok
     | {wait, {ready_resume, reference()}}
@@ -379,12 +488,15 @@ resume_nif(_PCM, _Ref) ->
     erlang:nif_error(not_loaded).
 
 
-%% @doc Start a PCM. Normally you don't need to call this function for playback
-%%      if using {@link set_params/2} as the auto-start mechanism will kick in.
-%%      However, you need to call this function in capture mode.
-%%
-%% @param PCM       the PCM handle
-%% @returns ok on success otherwise a posix error.
+-doc """
+Starts the PCM. Normally you do not need to call this function for playback if
+using `set_params/2`, as the auto-start mechanism will kick in. However, you
+need to call this function in capture mode.
+
+  * `PCM` - the PCM handle
+
+Returns `ok` on success otherwise a posix error.
+""".
 -spec start(pcm()) -> ok | {error, error()}.
 start(PCM) ->
     start_nif(PCM).
@@ -394,6 +506,31 @@ start_nif(_PCM) ->
     erlang:nif_error(not_loaded).
 
 
+-doc """
+Writes interleaved audio frames to the PCM.
+
+  * `PCM` - the PCM handle
+  * `Buffer` - the audio data, which should hold a whole number of frames, see
+    `frame_size/1`
+  * `Timeout` - how long to wait, in milliseconds, for the device to accept
+    the data, `infinity` to wait without a limit, or `nowait` to not wait
+
+Returns:
+
+  * `ok` - all the frames were written
+  * `{wait, {ready_writei, Reference}, Remaining}` - only with `nowait`, when
+    the device cannot accept more data yet. Wait for the
+    `{ready_writei, Reference}` message to be delivered to the calling
+    process, then call this function again with `Remaining`
+  * `{error, incomplete_frame, Remaining}` - the whole frames of `Buffer` were
+    written, and `Remaining` holds the trailing bytes that do not make a frame
+  * `{error, timeout, Remaining}` - the device did not accept the data in time
+  * `{error, Error, Remaining}` - a posix error. Use `recover/2` to recover
+    from it. `Remaining` is the data that was not written
+
+When `Buffer` ends with bytes that do not make a frame, those bytes are part of
+`Remaining` in the `wait`, `timeout` and posix error results.
+""".
 -spec writei(pcm(), binary(), timeout() | nowait) ->
       ok
     | {wait, {ready_writei, reference()}, Remaining :: binary()}
@@ -464,6 +601,25 @@ writei_nif(_PCM, _Buffer, _Frames, _Ref) ->
     erlang:nif_error(not_loaded).
 
 
+-doc """
+Reads interleaved audio frames from the PCM. At most 4096 frames are read at a
+time.
+
+  * `PCM` - the PCM handle
+  * `Timeout` - how long to wait, in milliseconds, for the device to have
+    data, `infinity` to wait without a limit, or `nowait` to not wait
+
+Returns:
+
+  * `{ok, Data}` - the audio data that was read, as interleaved frames
+  * `{wait, {ready_readi, Reference}}` - only with `nowait`, when the device
+    has no data yet. Wait for the `{ready_readi, Reference}` message to be
+    delivered to the calling process, then call this function again
+  * `{error, timeout}` - the device did not have data in time
+  * `{error, Error}` - a posix error. Use `recover/2` to recover from it
+
+In capture mode the PCM has to be started with `start/1` first.
+""".
 -spec readi(pcm(), timeout() | nowait) ->
       {ok, binary()}
     | {wait, {ready_readi, reference()}}
@@ -506,6 +662,12 @@ readi_nif(_PCM, _Frames, _Ref) ->
     erlang:nif_error(not_loaded).
 
 
+-doc """
+Gets the size in bytes of a frame, that is of one sample for each channel, with
+the current hardware parameters.
+
+  * `PCM` - the PCM handle
+""".
 -spec frame_size(pcm()) -> pos_integer().
 frame_size(PCM) ->
     frames_to_bytes_nif(PCM, 1).
@@ -515,6 +677,11 @@ frames_to_bytes_nif(_PCM, _Frames) ->
     erlang:nif_error(not_loaded).
 
 
+-doc """
+Gets the size in bytes of a sample with the current hardware parameters.
+
+  * `PCM` - the PCM handle
+""".
 -spec sample_size(pcm()) -> pos_integer().
 sample_size(PCM) ->
     samples_to_bytes_nif(PCM, 1).
